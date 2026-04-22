@@ -1,0 +1,192 @@
+import type { Incident, StaffMember, Guest, Property, AlertNotification } from '../types';
+
+export const mockIncidents: Incident[] = [
+  {
+    id: 'INC-042',
+    title: 'Smoke Alarm Activation',
+    type: 'fire',
+    severity: 4,
+    status: 'active',
+    location: { building: 'Tower A', floor: 14, room: '1402', coordinates: { x: 33, y: 25 } },
+    reportedAt: '2026-04-19T14:18:00',
+    reportedBy: 'IoT Sensor Array',
+    description: 'Automated smoke detection triggered in Room 1402. Maintenance unit reports light smoke in hallway. Source under investigation.',
+    assignedUnits: ['U12', 'U04'],
+    casualties: 0,
+    evacuated: 12,
+    guestsAffected: 28,
+    timeline: [
+      { id: 'tl-1', timestamp: '14:22:10', message: 'Unit 04 reported light smoke in hallway. Investigating source.', type: 'update', author: 'Unit 04' },
+      { id: 'tl-2', timestamp: '14:20:05', message: 'Unit 12 dispatched from Lobby. En route to Floor 14.', type: 'dispatch', author: 'Command' },
+      { id: 'tl-3', timestamp: '14:19:30', message: 'Severity escalated to Level 4 — Critical Priority.', type: 'escalation', author: 'System' },
+      { id: 'tl-4', timestamp: '14:18:00', message: 'Automated Alarm Triggered: Room 1402 smoke detector.', type: 'alert', author: 'IoT Sensor' },
+    ],
+  },
+  {
+    id: 'INC-041',
+    title: 'Medical Emergency — Guest Collapse',
+    type: 'medical',
+    severity: 3,
+    status: 'responding',
+    location: { building: 'Tower A', floor: 3, room: 'Lobby Bar', coordinates: { x: 60, y: 70 } },
+    reportedAt: '2026-04-19T14:05:00',
+    reportedBy: 'Staff - Maria Chen',
+    description: 'Guest collapsed near lobby bar. Conscious but disoriented. Staff administering first aid. EMS notified.',
+    assignedUnits: ['U07', 'U03'],
+    casualties: 0,
+    evacuated: 0,
+    guestsAffected: 1,
+    timeline: [
+      { id: 'tl-5', timestamp: '14:12:00', message: 'EMS Unit 7 en route. ETA 4 minutes.', type: 'dispatch', author: 'Dispatch' },
+      { id: 'tl-6', timestamp: '14:08:00', message: 'Guest conscious and responsive. First aid being administered.', type: 'update', author: 'Unit 07' },
+      { id: 'tl-7', timestamp: '14:05:00', message: 'Medical emergency reported by staff at Lobby Bar.', type: 'alert', author: 'Maria Chen' },
+    ],
+  },
+  {
+    id: 'INC-040',
+    title: 'Unauthorized Access — Restricted Area',
+    type: 'security',
+    severity: 2,
+    status: 'responding',
+    location: { building: 'Tower B', floor: 1, room: 'Server Room B1', coordinates: { x: 80, y: 40 } },
+    reportedAt: '2026-04-19T13:45:00',
+    reportedBy: 'Access Control System',
+    description: 'Multiple failed badge attempts at Server Room B1 door. No authorized personnel nearby.',
+    assignedUnits: ['U01'],
+    casualties: 0,
+    evacuated: 0,
+    guestsAffected: 0,
+    timeline: [
+      { id: 'tl-8', timestamp: '13:52:00', message: 'Security Unit 01 on scene. Area secured, investigating.', type: 'update', author: 'Unit 01' },
+      { id: 'tl-9', timestamp: '13:47:00', message: 'Unit 01 dispatched to Server Room B1.', type: 'dispatch', author: 'Command' },
+      { id: 'tl-10', timestamp: '13:45:00', message: 'Access control alert: 5 failed attempts in 2 minutes.', type: 'alert', author: 'System' },
+    ],
+  },
+];
+
+export const mockStaff: StaffMember[] = [
+  { id: 'U01', name: 'James Rodriguez', role: 'security', unit: 'Unit 01', status: 'deployed', location: { building: 'Tower B', floor: 1, x: 80, y: 40 }, phone: '+1-555-0101', currentIncident: 'INC-040' },
+  { id: 'U02', name: 'Sarah Kim', role: 'security', unit: 'Unit 02', status: 'available', location: { building: 'Tower A', floor: 1, x: 20, y: 50 }, phone: '+1-555-0102' },
+  { id: 'U03', name: 'David Okafor', role: 'medical', unit: 'Unit 03', status: 'deployed', location: { building: 'Tower A', floor: 3, x: 60, y: 70 }, phone: '+1-555-0103', currentIncident: 'INC-041' },
+  { id: 'U04', name: 'Maria Santos', role: 'maintenance', unit: 'Unit 04', status: 'deployed', location: { building: 'Tower A', floor: 14, x: 45, y: 35 }, phone: '+1-555-0104', currentIncident: 'INC-042', eta: 'On Scene' },
+  { id: 'U05', name: 'Alex Chang', role: 'engineering', unit: 'Unit 05', status: 'available', location: { building: 'Tower A', floor: -1, x: 30, y: 60 }, phone: '+1-555-0105' },
+  { id: 'U06', name: 'Priya Patel', role: 'housekeeping', unit: 'Unit 06', status: 'available', location: { building: 'Tower A', floor: 8, x: 55, y: 25 }, phone: '+1-555-0106' },
+  { id: 'U07', name: 'Emily Watson', role: 'medical', unit: 'Unit 07', status: 'deployed', location: { building: 'Tower A', floor: 3, x: 58, y: 68 }, phone: '+1-555-0107', currentIncident: 'INC-041' },
+  { id: 'U08', name: 'Carlos Rivera', role: 'security', unit: 'Unit 08', status: 'off-duty', location: { building: 'Tower A', floor: 1, x: 10, y: 10 }, phone: '+1-555-0108' },
+  { id: 'U09', name: 'Nina Zhao', role: 'management', unit: 'Unit 09', status: 'available', location: { building: 'Tower A', floor: 1, x: 25, y: 40 }, phone: '+1-555-0109' },
+  { id: 'U10', name: 'Tom Miller', role: 'security', unit: 'Unit 10', status: 'available', location: { building: 'Tower B', floor: 5, x: 40, y: 30 }, phone: '+1-555-0110' },
+  { id: 'U11', name: 'Rachel Green', role: 'housekeeping', unit: 'Unit 11', status: 'break', location: { building: 'Tower A', floor: 2, x: 70, y: 55 }, phone: '+1-555-0111' },
+  { id: 'U12', name: 'Mike Johnson', role: 'security', unit: 'Unit 12', status: 'deployed', location: { building: 'Tower A', floor: 14, x: 50, y: 33 }, phone: '+1-555-0112', currentIncident: 'INC-042', eta: 'ETA 2m' },
+];
+
+export const mockGuests: Guest[] = [
+  { id: 'G001', name: 'Priya Sharma', room: '1402', building: 'Tower A', floor: 14, checkIn: '2026-04-17', checkOut: '2026-04-21', status: 'evacuated', accessibility: [], language: 'Hindi', vip: false, lastSeen: 'Floor 14 Stairwell', phone: '+91-9876543210' },
+  { id: 'G002', name: 'John & Lisa Carter', room: '1404', building: 'Tower A', floor: 14, checkIn: '2026-04-18', checkOut: '2026-04-22', status: 'evacuated', accessibility: ['wheelchair'], language: 'English', vip: true, lastSeen: 'Elevator A - Floor 12', phone: '+1-555-7890' },
+  { id: 'G003', name: 'Hiroshi Tanaka', room: '1406', building: 'Tower A', floor: 14, checkIn: '2026-04-19', checkOut: '2026-04-20', status: 'in-room', accessibility: [], language: 'Japanese', vip: false, lastSeen: 'Room 1406', phone: '+81-90-1234-5678' },
+  { id: 'G004', name: 'Emma & Thomas Müller', room: '1408', building: 'Tower A', floor: 14, checkIn: '2026-04-16', checkOut: '2026-04-23', status: 'evacuated', accessibility: [], language: 'German', vip: false, lastSeen: 'Lobby', phone: '+49-171-2345678' },
+  { id: 'G005', name: 'Sofia Rodriguez', room: '1401', building: 'Tower A', floor: 14, checkIn: '2026-04-18', checkOut: '2026-04-21', status: 'missing', accessibility: ['hearing-impaired'], language: 'Spanish', vip: false, lastSeen: 'Room 1401 (last badge)', phone: '+34-612-345678' },
+  { id: 'G006', name: 'Ahmed Al-Farsi', room: '1403', building: 'Tower A', floor: 14, checkIn: '2026-04-19', checkOut: '2026-04-25', status: 'evacuated', accessibility: [], language: 'Arabic', vip: true, lastSeen: 'Lobby', phone: '+971-50-1234567' },
+  { id: 'G007', name: 'Marie Dubois', room: '803', building: 'Tower A', floor: 8, checkIn: '2026-04-17', checkOut: '2026-04-20', status: 'in-room', accessibility: [], language: 'French', vip: false, lastSeen: 'Room 803' },
+  { id: 'G008', name: 'William Park', room: '305', building: 'Tower A', floor: 3, checkIn: '2026-04-18', checkOut: '2026-04-22', status: 'common-area', accessibility: [], language: 'English', vip: false, lastSeen: 'Lobby Bar' },
+];
+
+export const mockProperties: Property[] = [
+  { id: 'P001', name: 'SentinelStay Central', location: 'New York, NY', coordinates: { lat: 40.7128, lng: -74.0060 }, status: 'critical', rooms: 450, occupancy: 82, activeIncidents: 3, staffOnDuty: 12 },
+  { id: 'P002', name: 'SentinelStay Marina', location: 'Miami, FL', coordinates: { lat: 25.7617, lng: -80.1918 }, status: 'nominal', rooms: 320, occupancy: 91, activeIncidents: 0, staffOnDuty: 8 },
+  { id: 'P003', name: 'SentinelStay Pacific', location: 'Los Angeles, CA', coordinates: { lat: 34.0522, lng: -118.2437 }, status: 'alert', rooms: 280, occupancy: 76, activeIncidents: 1, staffOnDuty: 10 },
+  { id: 'P004', name: 'SentinelStay Lakeside', location: 'Chicago, IL', coordinates: { lat: 41.8781, lng: -87.6298 }, status: 'nominal', rooms: 200, occupancy: 65, activeIncidents: 0, staffOnDuty: 6 },
+  { id: 'P005', name: 'SentinelStay Capitol', location: 'Washington, DC', coordinates: { lat: 38.9072, lng: -77.0369 }, status: 'nominal', rooms: 180, occupancy: 88, activeIncidents: 0, staffOnDuty: 7 },
+];
+
+export const mockAlerts: AlertNotification[] = [
+  { id: 'A001', type: 'sensor', severity: 4, message: 'Smoke detector activated — Room 1402, Floor 14', location: 'Tower A, Floor 14', timestamp: '14:18:00', acknowledged: true, incidentId: 'INC-042' },
+  { id: 'A002', type: 'staff', severity: 3, message: 'Medical emergency — Guest collapse at Lobby Bar', location: 'Tower A, Floor 3', timestamp: '14:05:00', acknowledged: true, incidentId: 'INC-041' },
+  { id: 'A003', type: 'system', severity: 2, message: 'Unauthorized access attempt — Server Room B1', location: 'Tower B, Floor 1', timestamp: '13:45:00', acknowledged: true, incidentId: 'INC-040' },
+  { id: 'A004', type: 'sensor', severity: 1, message: 'Water leak detected — Utility Room, Basement', location: 'Tower A, Basement', timestamp: '12:30:00', acknowledged: false },
+  { id: 'A005', type: 'sos', severity: 3, message: 'Guest SOS — Medical assistance requested, Room 607', location: 'Tower A, Floor 6', timestamp: '11:45:00', acknowledged: true },
+];
+
+export const mockAnalyticsData = {
+  responseTimeTrend: [
+    { month: 'Nov', avgResponse: 4.2, target: 2.0 },
+    { month: 'Dec', avgResponse: 3.8, target: 2.0 },
+    { month: 'Jan', avgResponse: 3.1, target: 2.0 },
+    { month: 'Feb', avgResponse: 2.5, target: 2.0 },
+    { month: 'Mar', avgResponse: 2.1, target: 2.0 },
+    { month: 'Apr', avgResponse: 1.8, target: 2.0 },
+  ],
+  incidentsByType: [
+    { name: 'Medical', value: 42, color: '#0052cc' },
+    { name: 'Fire', value: 18, color: '#b41719' },
+    { name: 'Security', value: 27, color: '#525f73' },
+    { name: 'Hazmat', value: 8, color: '#f4a261' },
+    { name: 'Weather', value: 5, color: '#4361ee' },
+  ],
+  incidentsByFloor: [
+    { floor: 'B1', count: 3 },
+    { floor: '1', count: 12 },
+    { floor: '2', count: 5 },
+    { floor: '3', count: 8 },
+    { floor: '4', count: 4 },
+    { floor: '5', count: 6 },
+    { floor: '6', count: 3 },
+    { floor: '7', count: 7 },
+    { floor: '8', count: 2 },
+    { floor: '9', count: 4 },
+    { floor: '10', count: 5 },
+    { floor: '11', count: 3 },
+    { floor: '12', count: 6 },
+    { floor: '13', count: 4 },
+    { floor: '14', count: 9 },
+  ],
+  drillPerformance: [
+    { drill: 'Fire Drill #1', score: 72, date: '2026-01-15' },
+    { drill: 'Medical #1', score: 68, date: '2026-01-28' },
+    { drill: 'Fire Drill #2', score: 81, date: '2026-02-12' },
+    { drill: 'Security #1', score: 75, date: '2026-02-25' },
+    { drill: 'Fire Drill #3', score: 88, date: '2026-03-10' },
+    { drill: 'Full Evac #1', score: 85, date: '2026-03-28' },
+    { drill: 'Medical #2', score: 91, date: '2026-04-08' },
+  ],
+  kpis: {
+    mttd: '18s',
+    mttr: '1m 48s',
+    alertAckTime: '12s',
+    falsePositiveRate: '3.2%',
+    staffAdoption: '94%',
+    guestSatisfaction: '4.7',
+    uptime: '99.99%',
+    totalIncidents: 147,
+    resolvedToday: 5,
+    avgResolutionTime: '22m',
+  },
+};
+
+export const chatMessages = [
+  { id: 'm1', sender: 'system', message: 'Emergency channel opened. A staff member will be with you shortly.', time: '14:18:05', type: 'system' as const },
+  { id: 'm2', sender: 'staff', name: 'Maria Santos', message: 'This is Unit 04. I\'m on Floor 14 now. Can you describe what you\'re experiencing?', time: '14:18:30', type: 'staff' as const },
+  { id: 'm3', sender: 'guest', name: 'Priya Sharma', message: 'I smell smoke coming from the hallway. It\'s getting stronger. I\'m scared.', time: '14:19:00', type: 'guest' as const },
+  { id: 'm4', sender: 'staff', name: 'Maria Santos', message: 'Stay calm. Keep your door closed and place wet towels at the base. Help is coming. Do NOT use elevators.', time: '14:19:15', type: 'staff' as const },
+  { id: 'm5', sender: 'system', message: 'Evacuation notice sent to all guests on Floors 13-15.', time: '14:19:30', type: 'system' as const },
+  { id: 'm6', sender: 'staff', name: 'Mike Johnson', message: 'Unit 12 here. I\'m coming up Stairwell B. ETA 2 minutes to your location.', time: '14:20:05', type: 'staff' as const },
+];
+
+export const buildingData = {
+  name: 'SentinelStay Central — Tower A',
+  address: '350 5th Avenue, New York, NY 10118',
+  floors: 18,
+  rooms: 450,
+  builtYear: 2019,
+  totalArea: '285,000 sq ft',
+  fireSuppressionSystem: 'Wet Sprinkler (All Floors)',
+  emergencyExits: 8,
+  elevators: 6,
+  stairwells: 4,
+  hazmatLocations: ['B1 — Chemical Storage', 'Floor 1 — Pool Chemicals', 'Roof — HVAC Refrigerants'],
+  shutOffValves: {
+    gas: 'B1 — Utility Room A',
+    water: 'B1 — Utility Room B',
+    electrical: 'B1 — Main Panel Room',
+  },
+  assembled: 'Parking Lot A (Primary), Garden Terrace (Secondary)',
+};

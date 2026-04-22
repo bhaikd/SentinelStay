@@ -1,0 +1,219 @@
+@import "tailwindcss";
+
+@theme {
+  /* M3 Color System */
+  --color-tertiary-container: #b41719;
+  --color-surface-container: #e9edff;
+  --color-inverse-on-surface: #edf0ff;
+  --color-tertiary-fixed: #ffdad6;
+  --color-primary-fixed: #dae2ff;
+  --color-on-secondary-fixed: #0f1c2d;
+  --color-secondary-fixed: #d6e3fb;
+  --color-background: #f9f9ff;
+  --color-on-error: #ffffff;
+  --color-tertiary-fixed-dim: #ffb4ab;
+  --color-on-secondary: #ffffff;
+  --color-secondary-fixed-dim: #bac7de;
+  --color-surface-bright: #f9f9ff;
+  --color-secondary: #525f73;
+  --color-surface-container-high: #e0e8ff;
+  --color-primary: #003d9b;
+  --color-on-primary-container: #c4d2ff;
+  --color-on-error-container: #93000a;
+  --color-on-secondary-container: #586579;
+  --color-on-secondary-fixed-variant: #3b485a;
+  --color-on-background: #141b2c;
+  --color-surface-dim: #d2daf0;
+  --color-secondary-container: #d6e3fb;
+  --color-surface-container-low: #f1f3ff;
+  --color-primary-container: #0052cc;
+  --color-on-tertiary-fixed: #410002;
+  --color-on-tertiary-fixed-variant: #93000b;
+  --color-surface-variant: #dbe2f9;
+  --color-surface-container-highest: #dbe2f9;
+  --color-surface-tint: #0c56d0;
+  --color-tertiary: #8d000a;
+  --color-on-primary: #ffffff;
+  --color-inverse-surface: #293041;
+  --color-on-primary-fixed: #001848;
+  --color-on-surface-variant: #434654;
+  --color-surface-container-lowest: #ffffff;
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-tertiary-container: #ffc5be;
+  --color-primary-fixed-dim: #b2c5ff;
+  --color-outline-variant: #c3c6d6;
+  --color-outline: #737685;
+  --color-surface: #f9f9ff;
+  --color-on-primary-fixed-variant: #0040a2;
+  --color-inverse-primary: #b2c5ff;
+  --color-on-surface: #141b2c;
+  --color-on-tertiary: #ffffff;
+
+  /* Additional brand colors */
+  --color-safe: #00c853;
+  --color-warning: #f4a261;
+  --color-info: #4361ee;
+
+  /* Typography */
+  --font-headline: 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-label: 'Inter', sans-serif;
+
+  /* Animations */
+  --animate-pulse-alert: pulse-alert 2s ease-in-out infinite;
+  --animate-dash: dash 1.5s linear infinite;
+  --animate-fade-in: fade-in 0.3s ease-out;
+  --animate-slide-up: slide-up 0.3s ease-out;
+  --animate-slide-right: slide-right 0.3s ease-out;
+  --animate-glow: glow 2s ease-in-out infinite;
+  --animate-count-up: count-up 0.6s ease-out;
+
+  @keyframes pulse-alert {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+  }
+
+  @keyframes dash {
+    to { stroke-dashoffset: -16; }
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slide-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slide-right {
+    from { opacity: 0; transform: translateX(-12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes glow {
+    0%, 100% { box-shadow: 0 0 8px rgba(180, 23, 25, 0.4); }
+    50% { box-shadow: 0 0 20px rgba(180, 23, 25, 0.8); }
+  }
+
+  @keyframes count-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* Base styles */
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Material Symbols */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-outline-variant);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-outline);
+}
+
+/* Glass effect utility */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass-dark {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Pulsing alert ring */
+.alert-ring {
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(180, 23, 25, 0.6);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(180, 23, 25, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(180, 23, 25, 0);
+  }
+}
+
+/* SOS Button pulsing */
+.sos-pulse {
+  animation: sos-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes sos-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(186, 26, 26, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 20px rgba(186, 26, 26, 0);
+  }
+}
+
+/* Floor plan room hover */
+.room-hover {
+  transition: all 0.2s ease;
+}
+
+.room-hover:hover {
+  fill: rgba(0, 82, 204, 0.15);
+  stroke: #0052cc;
+  stroke-width: 2;
+  cursor: pointer;
+}
+
+/* Timeline connector */
+.timeline-dot::before {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  left: -7px;
+  top: 6px;
+  z-index: 1;
+}
+
+/* Navigation active indicator */
+.nav-active {
+  position: relative;
+}
+
+.nav-active::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--color-primary);
+  border-radius: 2px 0 0 2px;
+}
