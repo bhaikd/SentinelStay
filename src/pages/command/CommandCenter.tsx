@@ -34,7 +34,6 @@ const facilities = [
 
 export default function CommandCenter() {
   const { incidents, staff, guests, currentFloor, setCurrentFloor, elapsedSeconds, addTimelineEvent } = useAppStore();
-  useSimulation();
 
   const [selectedIncident, setSelectedIncident] = useState(incidents[0]);
   const [logInput, setLogInput] = useState('');
