@@ -2,6 +2,10 @@
 
 SentinelStay is a high-fidelity, real-time emergency response platform built for hospitality and corporate environments. It connects guests in distress with rapid response teams, providing a centralized command center for dispatchers, and ensuring robust real-time communication during critical incidents.
 
+
+https://github.com/user-attachments/assets/c09acb0b-27c1-4ca0-8d24-e30a5b0b323d
+
+
 ## 🌟 Key Features
 
 - **Guest SOS Portal & Chat**: An easy-to-use portal for guests to trigger SOS alerts and communicate directly with staff during emergencies.
