@@ -23,6 +23,8 @@ import BuildingData from './pages/command/BuildingData';
 import ResponderPortal from './pages/responder/ResponderPortal';
 import CorporateDashboard from './pages/corporate/CorporateDashboard';
 import AnalyticsDashboard from './pages/analytics/AnalyticsDashboard';
+import Profile from './pages/profile/Profile';
+import Settings from './pages/settings/Settings';
 
 function App() {
   const { hydrate, isLoading } = useAppStore();
@@ -59,6 +61,8 @@ function App() {
           <Route path="/command/incidents" element={<IncidentLog />} />
           <Route path="/command/guests" element={<GuestRoster />} />
           <Route path="/command/building" element={<BuildingData />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
 
         {/* Protected Standalone Pages */}

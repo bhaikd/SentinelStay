@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import { resolve } from 'path';
 
 // Load .env
-dotenv.config({ path: resolve(__dirname, '../.env') });
+dotenv.config({ path: resolve(import.meta.dirname, '../.env') });
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -98,7 +98,7 @@ async function runSimulation() {
 
     // Add a timeline event to INC-042
     await supabase.from('timeline_events').insert({
-      id: `sim-tl-${Date.now()}`,
+      id: crypto.randomUUID(),
       incident_id: 'INC-042',
       timestamp: new Date().toTimeString().slice(0, 8),
       message: `System status check complete. Auto log ${tick}.`,
@@ -108,7 +108,7 @@ async function runSimulation() {
 
     if (tick % 3 === 0) {
       await supabase.from('alerts').insert({
-        id: `sim-alt-${Date.now()}`,
+        id: crypto.randomUUID(),
         type: 'sensor',
         severity: 2,
         message: `High temp warning on floor 15 (Radiant heat from 14). Tick ${tick}`,

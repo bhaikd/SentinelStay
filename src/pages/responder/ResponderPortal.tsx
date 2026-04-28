@@ -8,8 +8,19 @@ import { formatElapsed, typeIcon, severityColor, severityLabel } from '../../uti
 export default function ResponderPortal() {
   const { incidents, staff, guests, elapsedSeconds } = useAppStore();
   const activeIncident = incidents[0];
-  const deployedStaff = staff.filter((s) => s.currentIncident === activeIncident.id);
-  const affectedGuests = guests.filter((g) => g.floor === activeIncident.location.floor);
+  const deployedStaff = activeIncident ? staff.filter((s) => s.currentIncident === activeIncident.id) : [];
+  const affectedGuests = activeIncident ? guests.filter((g) => g.floor === activeIncident.location.floor) : [];
+
+  if (!activeIncident) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center">
+        <span className="material-symbols-outlined text-6xl text-emerald-500 mb-4">check_circle</span>
+        <h2 className="text-2xl font-bold">No Active Emergencies</h2>
+        <p className="text-slate-400 mt-2">All systems operating normally. Monitoring for incidents.</p>
+        <Link to="/" className="mt-6 text-sm text-blue-400 hover:text-blue-300 underline">Return to Home</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">

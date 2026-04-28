@@ -18,7 +18,7 @@ export default function StaffDashboard() {
   const [expandedAlert, setExpandedAlert] = useState<string | null>(null);
 
   const addToast = useCallback((msg: string, color = 'bg-primary') => {
-    const id = Date.now().toString();
+    const id = crypto.randomUUID();
     setToasts((prev) => [...prev, { id, msg, color }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
   }, []);

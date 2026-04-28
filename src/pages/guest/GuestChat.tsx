@@ -45,6 +45,51 @@ export default function GuestChat() {
     }, 2500);
   };
 
+  const handleAction = (type: 'voice' | 'photo' | 'location') => {
+    let messageText = '';
+    let responseText = '';
+    switch (type) {
+      case 'voice':
+        messageText = '🎤 Voice message (0:15)';
+        responseText = 'Voice note received. Stay calm, help is on the way.';
+        break;
+      case 'photo':
+        messageText = '📷 Photo attached';
+        responseText = 'Photo received. This helps our assessment. Please stand by.';
+        break;
+      case 'location':
+        messageText = '📍 Location shared: Room 1402';
+        responseText = 'Location received. We are routing a team to you now.';
+        break;
+    }
+
+    const newMsg = {
+      id: `m${Date.now()}`,
+      sender: 'guest',
+      name: 'You',
+      message: messageText,
+      time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+      type: 'guest' as const,
+    };
+    setMessages((prev) => [...prev, newMsg]);
+
+    setTyping(true);
+    setTimeout(() => {
+      setTyping(false);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `m${Date.now() + 1}`,
+          sender: 'staff',
+          name: 'Maria Santos',
+          message: responseText,
+          time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+          type: 'staff' as const,
+        },
+      ]);
+    }, 2500);
+  };
+
   return (
     <div className="flex-1 flex flex-col max-w-lg mx-auto w-full">
       {/* Chat Header */}
@@ -140,13 +185,22 @@ export default function GuestChat() {
           </button>
         </div>
         <div className="flex justify-center gap-4 mt-2">
-          <button className="text-xs text-blue-300/40 flex items-center gap-1 hover:text-blue-300/70">
+          <button 
+            onClick={() => handleAction('voice')}
+            className="text-xs text-blue-300/40 flex items-center gap-1 hover:text-blue-300/70 transition-colors"
+          >
             <span className="material-symbols-outlined text-sm">mic</span> Voice
           </button>
-          <button className="text-xs text-blue-300/40 flex items-center gap-1 hover:text-blue-300/70">
+          <button 
+            onClick={() => handleAction('photo')}
+            className="text-xs text-blue-300/40 flex items-center gap-1 hover:text-blue-300/70 transition-colors"
+          >
             <span className="material-symbols-outlined text-sm">photo_camera</span> Photo
           </button>
-          <button className="text-xs text-blue-300/40 flex items-center gap-1 hover:text-blue-300/70">
+          <button 
+            onClick={() => handleAction('location')}
+            className="text-xs text-blue-300/40 flex items-center gap-1 hover:text-blue-300/70 transition-colors"
+          >
             <span className="material-symbols-outlined text-sm">my_location</span> Location
           </button>
         </div>

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
+import { differenceInSeconds } from 'date-fns';
 import type { Incident, StaffMember, Guest, AlertNotification } from '../types';
-import { api } from '../services/api';
+import { api, mapIncident, mapStaff, mapGuest, mapAlert, mapTimelineEvent } from '../services/api';
 import { supabase } from '../lib/supabase';
 
 interface AppState {
@@ -36,6 +37,7 @@ interface AppState {
   setCurrentFloor: (floor: number) => void;
   conditionLevel: 'green' | 'yellow' | 'red';
   elapsedSeconds: number;
+  startDrill: () => void;
 }
 
 // Since simulation logic is handled in the backend, we just track elapsedSeconds locally 
@@ -57,7 +59,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sidebarOpen: true,
   currentFloor: 14,
   conditionLevel: 'red',
-  elapsedSeconds: 262,
+  elapsedSeconds: 0,
 
   hydrate: async () => {
     try {
@@ -71,16 +73,82 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (!realtimeChannel) {
         realtimeChannel = supabase
           .channel('schema-db-changes')
-          .on(
-            'postgres_changes',
-            { event: '*', schema: 'public' },
-            async (payload) => {
-              // A lazy but safe approach: on any change, re-fetch. 
-              // Alternatively, we could apply mutations directly to Zustand, but refetching ensures normalized data structure.
-              const fresh = await api.fetchAll();
-              set({ incidents: fresh.incidents, staff: fresh.staff, guests: fresh.guests, alerts: fresh.alerts });
-            }
-          )
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'incidents' }, (payload) => {
+            set((state) => {
+              if (payload.eventType === 'INSERT') {
+                const newInc = mapIncident(payload.new);
+                if (!state.incidents.find(i => i.id === newInc.id)) {
+                  return { incidents: [newInc, ...state.incidents] };
+                }
+              } else if (payload.eventType === 'UPDATE') {
+                return {
+                  incidents: state.incidents.map((inc) => 
+                    inc.id === payload.new.id ? { ...mapIncident(payload.new), timeline: inc.timeline } : inc
+                  )
+                };
+              } else if (payload.eventType === 'DELETE') {
+                return { incidents: state.incidents.filter(i => i.id !== payload.old.id) };
+              }
+              return state;
+            });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'timeline_events' }, (payload) => {
+            set((state) => {
+              if (payload.eventType === 'INSERT') {
+                const te = mapTimelineEvent(payload.new);
+                return {
+                  incidents: state.incidents.map(inc => {
+                    if (inc.id === payload.new.incident_id) {
+                      if (!inc.timeline.find(t => t.id === te.id)) {
+                        return { ...inc, timeline: [te, ...inc.timeline] };
+                      }
+                    }
+                    return inc;
+                  })
+                };
+              }
+              return state;
+            });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'staff' }, (payload) => {
+            set((state) => {
+              if (payload.eventType === 'INSERT') {
+                const s = mapStaff(payload.new);
+                if (!state.staff.find(x => x.id === s.id)) return { staff: [...state.staff, s] };
+              } else if (payload.eventType === 'UPDATE') {
+                return { staff: state.staff.map(x => x.id === payload.new.id ? mapStaff(payload.new) : x) };
+              } else if (payload.eventType === 'DELETE') {
+                return { staff: state.staff.filter(x => x.id !== payload.old.id) };
+              }
+              return state;
+            });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'guests' }, (payload) => {
+            set((state) => {
+              if (payload.eventType === 'INSERT') {
+                const g = mapGuest(payload.new);
+                if (!state.guests.find(x => x.id === g.id)) return { guests: [...state.guests, g] };
+              } else if (payload.eventType === 'UPDATE') {
+                return { guests: state.guests.map(x => x.id === payload.new.id ? mapGuest(payload.new) : x) };
+              } else if (payload.eventType === 'DELETE') {
+                return { guests: state.guests.filter(x => x.id !== payload.old.id) };
+              }
+              return state;
+            });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'alerts' }, (payload) => {
+            set((state) => {
+              if (payload.eventType === 'INSERT') {
+                const a = mapAlert(payload.new);
+                if (!state.alerts.find(x => x.id === a.id)) return { alerts: [a, ...state.alerts] };
+              } else if (payload.eventType === 'UPDATE') {
+                return { alerts: state.alerts.map(x => x.id === payload.new.id ? mapAlert(payload.new) : x) };
+              } else if (payload.eventType === 'DELETE') {
+                return { alerts: state.alerts.filter(x => x.id !== payload.old.id) };
+              }
+              return state;
+            });
+          })
           .subscribe();
       }
     } catch (e) {
@@ -160,4 +228,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   unacknowledgedCount: () => get().alerts.filter((a) => !a.acknowledged).length,
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setCurrentFloor: (floor) => set({ currentFloor: floor }),
+  startDrill: () => {
+    api.createDrillIncident().catch(console.error);
+  },
 }));
+
+// Update elapsedSeconds every second based on active incident
+setInterval(() => {
+  const state = useAppStore.getState();
+  const activeIncident = state.incidents.find((i) => i.id === state.activeIncidentId) || state.incidents[0];
+
+  if (activeIncident && activeIncident.reportedAt) {
+    const seconds = differenceInSeconds(new Date(), new Date(activeIncident.reportedAt));
+    if (seconds !== state.elapsedSeconds) {
+      useAppStore.setState({ elapsedSeconds: Math.max(0, seconds) });
+    }
+  } else if (state.elapsedSeconds !== 0) {
+    useAppStore.setState({ elapsedSeconds: 0 });
+  }
+}, 1000);

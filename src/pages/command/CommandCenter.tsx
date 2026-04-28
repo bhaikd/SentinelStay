@@ -40,8 +40,13 @@ export default function CommandCenter() {
   const [showGuestPanel, setShowGuestPanel] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const activeIncident = incidents.find((i) => i.id === selectedIncident.id) || incidents[0];
-  const deployedStaff = staff.filter((s) => s.currentIncident === activeIncident.id);
+  // AI Summarization State
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summaryText, setSummaryText] = useState('');
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  const activeIncident = selectedIncident ? incidents.find((i) => i.id === selectedIncident.id) || incidents[0] : incidents[0];
+  const deployedStaff = activeIncident ? staff.filter((s) => s.currentIncident === activeIncident.id) : [];
   const affectedGuests = guests.filter((g) => g.floor === currentFloor);
   const missingGuests = affectedGuests.filter((g) => g.status === 'missing');
 
@@ -55,7 +60,7 @@ export default function CommandCenter() {
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
     addTimelineEvent(activeIncident.id, {
-      id: `log-${Date.now()}`,
+      id: crypto.randomUUID(),
       timestamp: timeStr,
       message: logInput.trim(),
       type: 'update',
@@ -64,6 +69,168 @@ export default function CommandCenter() {
     setLogInput('');
     showToast('Log entry added to timeline.');
   };
+
+  const handleSummarize = async () => {
+    if (!activeIncident) return;
+    setIsSummarizing(true);
+    setSummaryText('');
+    setSummaryError(null);
+
+    try {
+      const response = await fetch('/api/summarize-incident', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: activeIncident.title,
+          description: activeIncident.description,
+          affectedSystems: `${activeIncident.guestsAffected} guests affected, ${missingGuests.length} missing.`,
+          timestamps: activeIncident.timeline.map(e => `[${e.timestamp}] ${e.message}`).join('\n')
+        })
+      });
+
+      if (!response.ok) {
+        let errorMsg = 'Failed to start summarization';
+        try {
+          const errorData = await response.json();
+          if (errorData.error) errorMsg = errorData.error;
+        } catch {
+          if (response.status === 504 || response.status === 502) {
+            errorMsg = 'API Server is not running. Please restart npm run dev.';
+          } else {
+            errorMsg = `Server responded with status ${response.status}`;
+          }
+        }
+        throw new Error(errorMsg);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder('utf-8');
+
+      if (!reader) throw new Error('No stream available');
+
+      let done = false;
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.replace('data: ', '');
+              if (data === '[DONE]') {
+                done = true;
+                break;
+              }
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.error) {
+                  setSummaryError(parsed.error);
+                  break;
+                }
+                if (parsed.text) {
+                  setSummaryText(prev => prev + parsed.text);
+                }
+              } catch (e) {
+                console.error('Error parsing JSON from stream:', e);
+              }
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      setSummaryError(err.message || 'An error occurred during summarization.');
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
+  const renderParsedSummary = (text: string) => {
+    if (!text) return null;
+    
+    let currentSection = 'summary';
+    let summaryLines: string[] = [];
+    let actionLines: string[] = [];
+    let priorityLines: string[] = [];
+    
+    const lines = text.split('\n');
+    
+    for (let line of lines) {
+      const lowerLine = line.toLowerCase();
+      if (lowerLine.includes('suggested next actions') || lowerLine.includes('next actions') || lowerLine.includes('actions:')) {
+        currentSection = 'actions';
+        continue;
+      } else if (lowerLine.includes('priority score') || lowerLine.includes('priority:')) {
+        currentSection = 'priority';
+        continue;
+      } else if ((lowerLine.includes('summary') || lowerLine.includes('summary:')) && currentSection === 'summary') {
+        continue;
+      }
+      
+      if (currentSection === 'summary') summaryLines.push(line);
+      if (currentSection === 'actions') actionLines.push(line);
+      if (currentSection === 'priority') priorityLines.push(line);
+    }
+
+    const rawPriority = priorityLines.join(' ').trim();
+    const scoreMatch = rawPriority.match(/\b([1-9]|10)\b/);
+    const score = scoreMatch ? parseInt(scoreMatch[1]) : null;
+    const justification = rawPriority.replace(/\b([1-9]|10)\b/, '').trim().replace(/^[-:\/10]+/, '').trim().replace(/\*/g, '');
+
+    return (
+      <div className="space-y-4 text-sm mt-2">
+        {summaryLines.length > 0 && summaryLines.some(l => l.trim()) && (
+          <div>
+            <h4 className="font-bold text-on-surface mb-1 text-xs uppercase tracking-wider text-primary">Summary</h4>
+            <p className="text-on-surface-variant leading-relaxed">{summaryLines.join(' ').replace(/\*/g, '').trim()}</p>
+          </div>
+        )}
+        
+        {actionLines.length > 0 && actionLines.some(l => l.trim()) && (
+          <div>
+            <h4 className="font-bold text-on-surface mb-1 text-xs uppercase tracking-wider text-primary">Suggested Next Actions</h4>
+            <ul className="list-decimal pl-5 text-on-surface-variant space-y-1">
+              {actionLines.filter(l => l.trim()).map((l, i) => (
+                <li key={i}>{l.replace(/^[\d\.\-\*]+/, '').trim()}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        
+        {priorityLines.length > 0 && priorityLines.some(l => l.trim()) && (
+          <div>
+            <h4 className="font-bold text-on-surface mb-2 text-xs uppercase tracking-wider text-primary">Priority Assessment</h4>
+            <div className="flex items-start gap-3 bg-surface-container-low p-3 rounded-lg border border-outline-variant/20">
+              {score !== null ? (
+                <div className={`shrink-0 flex items-center justify-center w-8 h-8 rounded-full font-bold text-white shadow-sm ${score >= 8 ? 'bg-red-500' : score >= 5 ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+                  {score}
+                </div>
+              ) : (
+                <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full font-bold text-white shadow-sm bg-gray-500">
+                  ?
+                </div>
+              )}
+              <div className="flex-1 text-on-surface-variant flex items-center">
+                {justification || rawPriority.replace(/\*/g, '')}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (!activeIncident) {
+    return (
+      <div className="h-full flex items-center justify-center bg-surface-container-lowest text-on-surface">
+        <div className="text-center">
+          <span className="material-symbols-outlined text-6xl text-emerald-500 mb-4" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+          <h2 className="text-2xl font-bold">No Active Incidents</h2>
+          <p className="text-on-surface-variant mt-2">The command center is currently monitoring for alerts.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex overflow-hidden relative">
@@ -354,6 +521,33 @@ export default function CommandCenter() {
               <div className="text-lg font-bold text-tertiary">{activeIncident.casualties}</div>
               <div className="text-[10px] text-on-surface-variant uppercase tracking-wider">Casualties</div>
             </div>
+          </div>
+
+          {/* AI Summarize Section */}
+          <div className="mt-6 border-t border-outline-variant/10 pt-4">
+            <button
+              onClick={handleSummarize}
+              disabled={isSummarizing}
+              className="w-full flex items-center justify-center gap-2 bg-primary-container text-on-primary-container py-2.5 rounded-lg font-semibold hover:bg-primary-container/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
+              {isSummarizing ? 'Generating AI Summary...' : 'Summarize Incident'}
+              {isSummarizing && <span className="material-symbols-outlined animate-spin text-[18px]">autorenew</span>}
+            </button>
+            
+            {summaryError && (
+              <div className="mt-3 text-xs text-red-400 bg-red-400/10 p-3 rounded-lg flex items-start gap-2 border border-red-400/20">
+                <span className="material-symbols-outlined text-sm shrink-0">error</span>
+                {summaryError}
+              </div>
+            )}
+            
+            {(summaryText || isSummarizing) && (
+              <div className="mt-4 bg-surface-container-lowest p-4 rounded-xl border border-primary/20 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-tertiary to-primary opacity-50" />
+                {renderParsedSummary(summaryText)}
+              </div>
+            )}
           </div>
         </div>
 

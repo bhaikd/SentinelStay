@@ -88,10 +88,7 @@ export default function Login() {
             Sign In
           </button>
         </form>
-        
-        <div className="mt-6 text-center text-xs text-slate-500">
-          <p>For testing, you might need to create this user in your Supabase project's Authentication tab, or just disable RLS / Auth requirements if you only want to test real-time.</p>
-        </div>
+
       </motion.div>
     </div>
   );

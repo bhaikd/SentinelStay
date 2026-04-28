@@ -19,7 +19,7 @@ const externalNav = [
 ];
 
 export default function DashboardLayout() {
-  const { conditionLevel, incidents, staff, elapsedSeconds } = useAppStore();
+  const { conditionLevel, incidents, staff, elapsedSeconds, startDrill } = useAppStore();
   const location = useLocation();
   const navigate = useNavigate();
   const [showDispatchModal, setShowDispatchModal] = useState(false);
@@ -47,7 +47,7 @@ export default function DashboardLayout() {
   return (
     <div className="h-screen overflow-hidden flex flex-col bg-surface text-on-surface font-body">
       {/* Top App Bar */}
-      <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-5 h-16 bg-slate-50/90 backdrop-blur-xl shadow-sm border-b border-slate-200/60">
+      <header className="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-5 h-16 bg-surface/90 backdrop-blur-xl shadow-sm border-b border-outline-variant/60">
         <div className="flex items-center gap-3">
           <span className="material-symbols-outlined text-primary text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>emergency</span>
           <span className="text-lg font-bold tracking-tight text-primary">SentinelStay</span>
@@ -88,7 +88,12 @@ export default function DashboardLayout() {
         <div className="flex items-center gap-2">
           {/* Drill Mode Toggle */}
           <button
-            onClick={() => setDrillMode(!drillMode)}
+            onClick={() => {
+              if (!drillMode) {
+                startDrill();
+              }
+              setDrillMode(!drillMode);
+            }}
             className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
               drillMode ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-surface-container text-on-surface-variant hover:bg-surface-variant'
             }`}
@@ -104,7 +109,7 @@ export default function DashboardLayout() {
             <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>phone_in_talk</span>
             <span className="hidden sm:inline">DISPATCH 911</span>
           </button>
-          <div className="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center cursor-pointer hover:bg-surface-variant transition-colors">
+          <div onClick={() => navigate('/profile')} className="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center cursor-pointer hover:bg-surface-variant hover:scale-110 active:scale-90 transition-all duration-200 shadow-sm hover:shadow-md">
             <span className="material-symbols-outlined text-on-surface-variant text-xl">account_circle</span>
           </div>
         </div>
@@ -112,11 +117,11 @@ export default function DashboardLayout() {
 
       <div className="flex h-full pt-16">
         {/* Navigation Sidebar */}
-        <nav className="hidden lg:flex flex-col fixed left-0 top-16 h-[calc(100vh-4rem)] z-40 w-64 bg-slate-50 border-r border-slate-200">
+        <nav className="hidden lg:flex flex-col fixed left-0 top-16 h-[calc(100vh-4rem)] z-40 w-64 bg-surface border-r border-outline-variant/60">
           {/* Profile */}
-          <div className="px-5 py-5 border-b border-outline-variant/10">
+          <div onClick={() => navigate('/profile')} className="px-5 py-5 border-b border-outline-variant/10 cursor-pointer hover:bg-surface-variant hover:pl-6 transition-all duration-300">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center shadow-sm">
                 <span className="material-symbols-outlined text-on-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>shield_person</span>
               </div>
               <div>
@@ -130,7 +135,7 @@ export default function DashboardLayout() {
           {/* Main Nav */}
           <div className="flex flex-col flex-1 mt-1 overflow-y-auto">
             <div className="px-3 py-2">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 mb-1">Operations</p>
+              <p className="text-[10px] font-bold text-on-surface-variant/70 uppercase tracking-widest px-3 mb-1">Operations</p>
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
                 return (
@@ -139,40 +144,40 @@ export default function DashboardLayout() {
                     to={item.path}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all mb-0.5 ${
                       isActive
-                        ? 'bg-blue-50 text-blue-700 font-semibold'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        ? 'bg-primary-container text-on-primary-container font-semibold'
+                        : 'text-on-surface-variant hover:bg-surface-variant hover:text-on-surface'
                     }`}
                   >
-                    <span className={`material-symbols-outlined text-xl ${isActive ? 'text-blue-600' : 'text-slate-400'}`}
+                    <span className={`material-symbols-outlined text-xl ${isActive ? 'text-primary' : 'text-on-surface-variant/70'}`}
                       style={isActive ? { fontVariationSettings: "'FILL' 1" } : {}}>
                       {item.icon}
                     </span>
                     {item.label}
-                    {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-600" />}
+                    {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />}
                   </NavLink>
                 );
               })}
             </div>
 
-            <div className="px-3 py-2 border-t border-slate-200/60 mt-1">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 mb-1">Other Views</p>
+            <div className="px-3 py-2 border-t border-outline-variant/60 mt-1">
+              <p className="text-[10px] font-bold text-on-surface-variant/70 uppercase tracking-widest px-3 mb-1">Other Views</p>
               {externalNav.map((item) => (
                 <button
                   key={item.path}
                   onClick={() => navigate(item.path)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-all mb-0.5"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-on-surface-variant hover:bg-surface-variant hover:text-on-surface transition-all mb-0.5"
                 >
-                  <span className="material-symbols-outlined text-xl text-slate-400">{item.icon}</span>
+                  <span className="material-symbols-outlined text-xl text-on-surface-variant/70">{item.icon}</span>
                   {item.label}
-                  <span className="material-symbols-outlined text-slate-300 text-sm ml-auto">open_in_new</span>
+                  <span className="material-symbols-outlined text-on-surface-variant/50 text-sm ml-auto">open_in_new</span>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="p-3 border-t border-slate-200/60">
-            <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
-              <span className="material-symbols-outlined text-xl text-slate-400">settings</span>
+          <div className="p-3 border-t border-outline-variant/60">
+            <button onClick={() => navigate('/settings')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-on-surface-variant hover:bg-surface-variant hover:text-on-surface hover:shadow-sm hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200">
+              <span className="material-symbols-outlined text-xl text-on-surface-variant/70 group-hover:text-on-surface transition-colors">settings</span>
               Settings
             </button>
           </div>
@@ -225,11 +230,11 @@ export default function DashboardLayout() {
                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Structured Dispatch Payload</p>
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5 text-sm font-mono mb-5">
                       {[
-                        { label: 'Incident Type', value: primaryIncident.type.toUpperCase() },
-                        { label: 'Severity', value: `Level ${primaryIncident.severity} — Critical` },
-                        { label: 'Location', value: `${primaryIncident.location.building}, Floor ${primaryIncident.location.floor}, Room ${primaryIncident.location.room}` },
-                        { label: 'Casualties', value: primaryIncident.casualties.toString() },
-                        { label: 'Guests Affected', value: primaryIncident.guestsAffected.toString() },
+                        { label: 'Incident Type', value: primaryIncident ? primaryIncident.type.toUpperCase() : 'NONE' },
+                        { label: 'Severity', value: primaryIncident ? `Level ${primaryIncident.severity} — Critical` : 'N/A' },
+                        { label: 'Location', value: primaryIncident ? `${primaryIncident.location.building}, Floor ${primaryIncident.location.floor}, Room ${primaryIncident.location.room}` : 'N/A' },
+                        { label: 'Casualties', value: primaryIncident ? primaryIncident.casualties.toString() : '0' },
+                        { label: 'Guests Affected', value: primaryIncident ? primaryIncident.guestsAffected.toString() : '0' },
                         { label: 'Duration', value: formatElapsed(elapsedSeconds) },
                         { label: 'Address', value: '350 5th Avenue, New York, NY 10118' },
                         { label: 'Contact', value: 'SentinelStay Command — +1 (555) 911-0042' },
@@ -270,7 +275,7 @@ export default function DashboardLayout() {
                   </div>
                   <h3 className="text-xl font-black text-slate-800 mb-2">911 Dispatched</h3>
                   <p className="text-sm text-slate-500">Emergency services have been notified. Incident payload sent.</p>
-                  <div className="mt-4 text-xs text-slate-400 font-mono">Reference: CAD-{Date.now().toString().slice(-6)}</div>
+                  <div className="mt-4 text-xs text-slate-400 font-mono">Reference: CAD-{crypto.randomUUID().slice(0, 6).toUpperCase()}</div>
                 </div>
               )}
             </motion.div>
