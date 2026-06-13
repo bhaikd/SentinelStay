@@ -50,7 +50,7 @@ This is a simulated ${title} incident. The automated systems have detected anoma
   }
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const prompt = `You are an AI assistant for an emergency response command center.
 Please summarize the following incident context.
 Your response MUST contain exactly three sections:
@@ -93,6 +93,15 @@ Timeline: ${timestamps}`;
 });
 
 const PORT = 3001;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`API server running on port ${PORT}`);
+});
+
+server.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use. Kill the old process or use a different port.`);
+  } else {
+    console.error('Server error:', err);
+  }
+  process.exit(1);
 });

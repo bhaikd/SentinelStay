@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAppStore } from '../../store/appStore';
-import { buildingData } from '../../data/mockData';
+import { BUILDING as buildingData } from '../../config/siteConfig';
 import { formatElapsed, typeIcon, severityColor, severityLabel } from '../../utils/formatting';
 
 export default function ResponderPortal() {

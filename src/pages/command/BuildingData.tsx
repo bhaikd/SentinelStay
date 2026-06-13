@@ -1,5 +1,5 @@
 import React from 'react';
-import { buildingData } from '../../data/mockData';
+import { BUILDING as buildingData } from '../../config/siteConfig';
 
 export default function BuildingData() {
   return (

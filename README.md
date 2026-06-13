@@ -1,99 +1,118 @@
 # SentinelStay
 
-SentinelStay is a high-fidelity, real-time emergency response platform built for hospitality and corporate environments. It connects guests in distress with rapid response teams, providing a centralized command center for dispatchers, and ensuring robust real-time communication during critical incidents.
-
-
-https://github.com/user-attachments/assets/c09acb0b-27c1-4ca0-8d24-e30a5b0b323d
-
+SentinelStay is a real-time emergency response platform built for hospitality and corporate environments. It connects guests in distress with rapid response teams, provides a centralized command center for dispatchers, and ensures robust real-time communication during critical incidents.
 
 ## 🌟 Key Features
 
-- **Guest SOS Portal & Chat**: An easy-to-use portal for guests to trigger SOS alerts and communicate directly with staff during emergencies.
-- **Centralized Command Center**: A comprehensive dashboard for dispatchers to monitor active incidents, view building data, manage guest rosters, and dispatch responders.
-- **Staff & Responder Portals**: Dedicated interfaces for on-ground staff and responders to receive assignments, update incident statuses, and coordinate efforts.
-- **Corporate & Analytics Dashboards**: High-level overviews and analytics for corporate management to review incident resolution times, severity metrics, and staff performance.
-- **Real-Time Data Sync**: Powered by Supabase, ensuring that all connected clients receive instant updates on incidents, chat messages, and status changes.
-- **Simulation Mode**: A built-in backend worker script to simulate real-time incident flows for testing and demonstration purposes.
+- **Guest SOS Portal & Chat** – frictionless way for guests to trigger SOS alerts and stay in touch with staff during emergencies.
+- **Centralized Command Center** – live floor plans, incident timelines, guest roster, and dispatch.
+- **Staff & Responder Portals** – dedicated interfaces for on-ground staff and responders.
+- **Corporate & Analytics Dashboards** – KPIs, response times, severity distribution.
+- **Real-Time Sync** – Supabase Realtime drives instant cross-client updates.
+- **AI Summaries** – streamed Gemini-powered incident summaries with rate limiting (mock fallback if no key).
+- **Role-Based Access** – Postgres RLS keyed off an `app_role` enum (`guest`, `staff`, `responder`, `dispatcher`, `admin`).
+- **Drill / Simulation Mode** – generate synthetic incidents for training & demos.
 
-## 🛠️ Technology Stack
+## 🛠️ Stack
 
-- **Frontend**: React 19, TypeScript, Vite
-- **Styling**: Tailwind CSS v4, Framer Motion (for fluid animations), Lucide React (icons)
-- **State Management**: Zustand
-- **Backend & Database**: Supabase (PostgreSQL, Realtime, Auth)
-- **Data Visualization**: Recharts
-
-## 🔄 Core Workflows
-
-Understanding the workflows is crucial for operating the SentinelStay platform:
-
-### 1. Guest Emergency Flow
-- **Trigger**: A guest accesses the `Guest SOS Portal` (`/guest/sos`) and triggers an emergency alert.
-- **Communication**: The guest is redirected to the `Guest Chat` (`/guest/chat`) where they can provide live updates and communicate with the command center.
-- **Status**: The incident is logged into the system with an initial status (e.g., `pending`).
-
-### 2. Command Center & Dispatch Flow
-- **Monitoring**: Dispatchers monitor the `Command Center` (`/command`). New incidents appear in real-time.
-- **Assessment**: Dispatchers review the incident details, building data (`/command/building`), and the guest roster (`/command/guests`).
-- **Action**: Dispatchers can:
-  - **Acknowledge** alerts.
-  - **Respond**: Mark the incident as `responding` and assign available staff.
-  - **Escalate**: Increase the incident severity if the situation worsens.
-  - **Communicate**: Chat with the guest in distress to gather more information.
-- **Resolution**: Once the situation is under control, the incident is marked as `resolved`.
-
-### 3. Responder / Staff Flow
-- **Assignment**: Staff members use the `Staff Dashboard` (`/staff`) or `Responder Portal` (`/responder`) to see assigned incidents.
-- **Execution**: Responders update their status (e.g., `in-transit`, `on-scene`) and provide updates to the command center.
-
-### 4. Corporate & Analytics Flow
-- **Review**: Management uses the `Corporate Dashboard` (`/corporate`) and `Analytics Dashboard` (`/analytics`) to review historical data.
-- **Metrics**: Track average response times, incident severity distributions, and overall platform effectiveness.
+- **Frontend**: React 19, TypeScript, Vite, Tailwind v4, Framer Motion, Lucide, Recharts
+- **State**: Zustand
+- **Backend**: Supabase (Postgres, Realtime, Auth) + Vercel Edge Functions
+- **AI**: Google Gemini (`@google/generative-ai`)
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js (v18 or higher recommended)
+
+- Node.js **18+**
 - A Supabase project
+- (Optional) A Gemini API key for live AI summaries — without it, the API streams a realistic mock so the UX still works end-to-end.
 
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/bhaikd/SentinelStay.git
-   cd SentinelStay
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Environment Setup**
-   Create a `.env` file in the root directory and add your Supabase credentials:
-   ```env
-   VITE_SUPABASE_URL=your_supabase_project_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
-4. **Database Setup**
-   Run the provided `schema.sql` script in your Supabase SQL editor to create the necessary tables and realtime publications.
-
-5. **Run the Development Server**
-   ```bash
-   npm run dev
-   ```
-   The application will be available at `http://localhost:5173`.
-
-### 🧪 Running the Simulation
-
-To populate the platform with live mock data and simulate active incidents (useful for testing and demonstrations):
+### 1. Install
 
 ```bash
-npm run simulate
+git clone https://github.com/bhaikd/SentinelStay.git
+cd SentinelStay
+npm install
 ```
-This runs a background process (`server/simulate.ts`) that will generate random incidents, timeline events, and state changes.
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Fill in:
+
+| Variable | Where to get it | Required |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | Supabase → Project Settings → API | ✅ |
+| `VITE_SUPABASE_ANON_KEY` | Supabase → Project Settings → API (anon, public) | ✅ |
+| `SUPABASE_URL` | same as above | only for `npm run simulate` |
+| `SUPABASE_SERVICE_KEY` | Supabase → Project Settings → API (service role — keep secret!) | only for `npm run simulate` |
+| `GEMINI_API_KEY` | <https://aistudio.google.com/app/apikey> | optional |
+
+### 3. Provision the database
+
+In the Supabase SQL editor, run the entire contents of [`schema.sql`](schema.sql). It creates tables, enums, the `profiles` table with role-based RLS, the realtime publication, and an auto-trigger that creates a profile row whenever a new auth user signs up.
+
+After your first sign-up, promote yourself to admin:
+
+```sql
+UPDATE public.profiles SET role = 'admin' WHERE email = 'you@example.com';
+```
+
+### 4. Run locally
+
+```bash
+npm run dev
+```
+
+This starts:
+
+- Vite (frontend) at <http://localhost:5173>
+- An Express dev server (API) at `http://localhost:3001`, proxied at `/api/*` by Vite
+
+Other useful scripts:
+
+```bash
+npm run dev:web    # frontend only
+npm run dev:api    # AI dev API only
+npm run typecheck  # tsc -b (strict)
+npm run lint
+npm run build      # production bundle
+npm run preview    # serve the production bundle
+npm run simulate   # populate Supabase with synthetic incidents
+```
+
+## ☁️ Deploying to Vercel
+
+1. Push the repo to GitHub.
+2. Import it in Vercel — the framework auto-detects as **Vite**.
+3. Set the following project environment variables in Vercel → Settings → Environment Variables:
+   - `VITE_SUPABASE_URL` (Production, Preview, Development)
+   - `VITE_SUPABASE_ANON_KEY` (Production, Preview, Development)
+   - `GEMINI_API_KEY` (Production at minimum) — optional
+4. Click **Deploy**.
+
+The `api/summarize-incident.ts` file runs on Vercel's **Edge runtime** (`export const config = { runtime: 'edge' }`). This is critical: the default Node serverless runtime buffers SSE responses, which is what previously caused the AI summary to never stream into the Command Center. Edge keeps the stream alive.
+
+`vercel.json` rewrites everything except `/api/*` to `index.html` so client-side routing works after deploy.
+
+## 🔐 Security notes
+
+- The anon key is meant to be public; the **service role key** must never ship to the client. The simulation worker is the only thing that uses it, and only locally.
+- RLS is enabled on every public table. Anonymous users can only insert SOS alerts (`alerts.type = 'sos'`). Reads, writes, escalations, and resolutions are gated by the `app_role` of the signed-in user.
+- The AI endpoint applies a small in-memory per-IP rate limit (10 req/min). For higher scale, swap in Upstash/Redis.
+- Content-Security-Policy is set in `index.html`.
+
+## 🔄 Workflows
+
+- **Guest emergency**: `/guest/sos` → triggers an alert → `/guest/chat` for live updates.
+- **Command/dispatch**: `/command` shows live incidents, deployable units, AI summaries, and the floor plan.
+- **Staff/responder**: `/staff`, `/responder` show assigned incidents and let responders update status.
+- **Corporate/analytics**: `/corporate`, `/analytics` for historical KPIs.
 
 ## 📄 License
 
-This project is proprietary and confidential.
+Proprietary and confidential.

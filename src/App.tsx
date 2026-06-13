@@ -1,6 +1,5 @@
-import React, { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { supabase } from './lib/supabase';
 import { useAppStore } from './store/appStore';
 
 // Components
@@ -10,21 +9,30 @@ import ProtectedRoute from './components/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import GuestLayout from './layouts/GuestLayout';
 
-// Pages
+// Eagerly-loaded routes (light weight, top of funnel)
 import Landing from './pages/Landing';
 import Login from './pages/auth/Login';
 import SOSPortal from './pages/guest/SOSPortal';
 import GuestChat from './pages/guest/GuestChat';
-import StaffDashboard from './pages/staff/StaffDashboard';
-import CommandCenter from './pages/command/CommandCenter';
-import IncidentLog from './pages/command/IncidentLog';
-import GuestRoster from './pages/command/GuestRoster';
-import BuildingData from './pages/command/BuildingData';
-import ResponderPortal from './pages/responder/ResponderPortal';
-import CorporateDashboard from './pages/corporate/CorporateDashboard';
-import AnalyticsDashboard from './pages/analytics/AnalyticsDashboard';
-import Profile from './pages/profile/Profile';
-import Settings from './pages/settings/Settings';
+
+// Lazy-loaded routes (heavy dashboards, charts, etc.)
+const StaffDashboard = lazy(() => import('./pages/staff/StaffDashboard'));
+const CommandCenter = lazy(() => import('./pages/command/CommandCenter'));
+const IncidentLog = lazy(() => import('./pages/command/IncidentLog'));
+const GuestRoster = lazy(() => import('./pages/command/GuestRoster'));
+const BuildingData = lazy(() => import('./pages/command/BuildingData'));
+const Channels = lazy(() => import('./pages/command/Channels'));
+const ResponderPortal = lazy(() => import('./pages/responder/ResponderPortal'));
+const CorporateDashboard = lazy(() => import('./pages/corporate/CorporateDashboard'));
+const AnalyticsDashboard = lazy(() => import('./pages/analytics/AnalyticsDashboard'));
+const Profile = lazy(() => import('./pages/profile/Profile'));
+const Settings = lazy(() => import('./pages/settings/Settings'));
+
+const RouteFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-950 text-blue-500">
+    <span className="material-symbols-outlined animate-spin text-4xl" aria-label="Loading">autorenew</span>
+  </div>
+);
 
 function App() {
   const { hydrate, isLoading } = useAppStore();
@@ -43,7 +51,8 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
         {/* Public Routes */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
@@ -61,6 +70,7 @@ function App() {
           <Route path="/command/incidents" element={<IncidentLog />} />
           <Route path="/command/guests" element={<GuestRoster />} />
           <Route path="/command/building" element={<BuildingData />} />
+          <Route path="/command/channels" element={<Channels />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
@@ -73,6 +83,7 @@ function App() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

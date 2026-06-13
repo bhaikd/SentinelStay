@@ -12,10 +12,29 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://127.0.0.1:3001',
         changeOrigin: true,
+      },
+    },
+  },
+  build: {
+    sourcemap: false,
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('framer-motion')) return 'motion';
+          if (id.includes('recharts') || id.includes('d3-')) return 'charts';
+          if (id.includes('@supabase')) return 'supabase';
+          if (id.includes('date-fns')) return 'dates';
+          if (id.includes('react-router')) return 'router';
+          if (id.includes('react-dom') || id.includes('/react/')) return 'react';
+          return 'vendor';
+        },
       },
     },
   },

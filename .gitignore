@@ -23,5 +23,14 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.env.local
+.env.*.local
 
 .vercel
+
+# OS / IDE
+Thumbs.db
+
+# Build artifacts
+coverage/
+*.tsbuildinfo

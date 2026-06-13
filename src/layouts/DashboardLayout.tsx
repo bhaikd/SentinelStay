@@ -9,6 +9,7 @@ const navItems = [
   { label: 'Incident Log', icon: 'list_alt', path: '/command/incidents' },
   { label: 'Guest Roster', icon: 'groups', path: '/command/guests' },
   { label: 'Building Data', icon: 'domain', path: '/command/building' },
+  { label: 'Channels', icon: 'forum', path: '/command/channels' },
   { label: 'Staff Dashboard', icon: 'badge', path: '/staff' },
 ];
 

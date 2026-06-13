@@ -20,6 +20,9 @@ interface AppState {
   // Staff
   staff: StaffMember[];
   updateStaffStatus: (staffId: string, status: StaffMember['status']) => void;
+  addStaff: (input: { name: string; role: StaffMember['role']; unit?: string; building?: string; floor?: number; phone?: string }) => Promise<StaffMember | null>;
+  deployStaff: (staffId: string, incidentId: string, opts?: { eta?: string; onScene?: boolean }) => Promise<void>;
+  recallStaff: (staffId: string) => Promise<void>;
 
   // Guests
   guests: Guest[];
@@ -173,39 +176,113 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   respondToIncident: (incidentId) => {
+    const prev = get().incidents.find((i) => i.id === incidentId);
     set((state) => ({
       incidents: state.incidents.map((inc) =>
         inc.id === incidentId ? { ...inc, status: 'responding' as const } : inc
       ),
     }));
-    api.updateIncidentStatus(incidentId, 'responding').catch(console.error);
+    api.updateIncidentStatus(incidentId, 'responding').catch((e) => {
+      console.error('respondToIncident failed:', e);
+      if (prev) set((state) => ({
+        incidents: state.incidents.map((inc) => inc.id === incidentId ? { ...inc, status: prev.status } : inc),
+      }));
+      alert(`Could not mark responding: ${(e as Error).message}`);
+    });
   },
 
   escalateIncident: (incidentId) => {
     const incToEscalate = get().incidents.find(i => i.id === incidentId);
     if (!incToEscalate) return;
+    const prevSeverity = incToEscalate.severity;
 
     set((state) => ({
       incidents: state.incidents.map((inc) =>
         inc.id === incidentId ? { ...inc, severity: Math.min(4, inc.severity + 1) as 1 | 2 | 3 | 4 } : inc
       ),
     }));
-    api.escalateIncident(incidentId, incToEscalate.severity).catch(console.error);
+    api.escalateIncident(incidentId, incToEscalate.severity).catch((e) => {
+      console.error('escalateIncident failed:', e);
+      set((state) => ({
+        incidents: state.incidents.map((inc) => inc.id === incidentId ? { ...inc, severity: prevSeverity } : inc),
+      }));
+      alert(`Could not escalate: ${(e as Error).message}`);
+    });
   },
 
   resolveIncident: (incidentId) => {
+    const prev = get().incidents.find((i) => i.id === incidentId);
     set((state) => ({
       incidents: state.incidents.map((inc) =>
         inc.id === incidentId ? { ...inc, status: 'resolved' as const } : inc
       ),
     }));
-    api.updateIncidentStatus(incidentId, 'resolved').catch(console.error);
+    api.updateIncidentStatus(incidentId, 'resolved').catch((e) => {
+      console.error('resolveIncident failed:', e);
+      if (prev) set((state) => ({
+        incidents: state.incidents.map((inc) => inc.id === incidentId ? { ...inc, status: prev.status } : inc),
+      }));
+      alert(`Could not resolve: ${(e as Error).message}`);
+    });
   },
 
   updateStaffStatus: (staffId, status) => {
+    const prev = get().staff.find((s) => s.id === staffId);
     set((state) => ({
       staff: state.staff.map((s) => (s.id === staffId ? { ...s, status } : s)),
     }));
+    api.updateStaffStatus(staffId, status).catch((e) => {
+      console.error('updateStaffStatus failed:', e);
+      if (prev) {
+        set((state) => ({
+          staff: state.staff.map((s) => (s.id === staffId ? { ...s, status: prev.status } : s)),
+        }));
+      }
+      alert(`Could not update status: ${(e as Error).message}`);
+    });
+  },
+
+  addStaff: async (input) => {
+    try {
+      const created = await api.createStaff(input);
+      set((state) => ({
+        staff: state.staff.find((s) => s.id === created.id) ? state.staff : [...state.staff, created],
+      }));
+      return created;
+    } catch (e) {
+      console.error('addStaff failed:', e);
+      alert(`Could not add staff: ${(e as Error).message}`);
+      return null;
+    }
+  },
+
+  deployStaff: async (staffId, incidentId, opts) => {
+    // Optimistic
+    set((state) => ({
+      staff: state.staff.map((s) =>
+        s.id === staffId
+          ? { ...s, currentIncident: incidentId, status: opts?.onScene ? 'deployed' : 'en-route', eta: opts?.eta || (opts?.onScene ? 'On Scene' : 'ETA 2m') }
+          : s
+      ),
+    }));
+    try {
+      await api.deployStaff(staffId, incidentId, opts);
+    } catch (e) {
+      console.error('deployStaff failed:', e);
+    }
+  },
+
+  recallStaff: async (staffId) => {
+    set((state) => ({
+      staff: state.staff.map((s) =>
+        s.id === staffId ? { ...s, currentIncident: undefined, status: 'available', eta: undefined } : s
+      ),
+    }));
+    try {
+      await api.recallStaff(staffId);
+    } catch (e) {
+      console.error('recallStaff failed:', e);
+    }
   },
 
   updateGuestStatus: (guestId, guestStatus) => {

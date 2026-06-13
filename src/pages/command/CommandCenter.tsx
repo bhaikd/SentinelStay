@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../../store/appStore';
 import { formatElapsed, severityColor, severityLabel, typeIcon } from '../../utils/formatting';
+import { computeSafePath } from '../../utils/pathfinding';
 
-const floors = Array.from({ length: 18 }, (_, i) => i + 1).reverse();
+
 
 // SVG floor plan rooms for Floor 14
 const floorRooms = [
   { id: '1401', x: 40, y: 60, w: 100, h: 70, label: '1401' },
-  { id: '1402', x: 160, y: 60, w: 100, h: 70, label: '1402', alert: true },
+  { id: '1402', x: 160, y: 60, w: 100, h: 70, label: '1402' },
   { id: '1403', x: 280, y: 60, w: 100, h: 70, label: '1403' },
   { id: '1404', x: 400, y: 60, w: 100, h: 70, label: '1404' },
   { id: '1405', x: 520, y: 60, w: 100, h: 70, label: '1405' },
@@ -22,7 +23,7 @@ const floorRooms = [
 ];
 
 const corridors = [
-  { x: 40, y: 150, w: 700, h: 110 },
+  { x: 35, y: 150, w: 705, h: 110 },
 ];
 
 const facilities = [
@@ -30,25 +31,78 @@ const facilities = [
   { x: 760, y: 150, w: 60, h: 50, label: 'Stairs', icon: 'stairs' },
   { x: 760, y: 220, w: 60, h: 50, label: 'Stairs', icon: 'stairs' },
   { x: 760, y: 280, w: 60, h: 70, label: 'Elev B', icon: 'elevator' },
+  { x: 5, y: 170, w: 30, h: 70, label: 'Stairs C', icon: 'stairs' },
 ];
 
 export default function CommandCenter() {
-  const { incidents, staff, guests, currentFloor, setCurrentFloor, elapsedSeconds, addTimelineEvent } = useAppStore();
+  const { incidents, staff, guests, currentFloor, setCurrentFloor, elapsedSeconds, addTimelineEvent, addStaff, deployStaff, recallStaff, respondToIncident, escalateIncident, resolveIncident } = useAppStore();
 
-  const [selectedIncident, setSelectedIncident] = useState(incidents[0]);
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(incidents[0]?.id ?? null);
   const [logInput, setLogInput] = useState('');
   const [showGuestPanel, setShowGuestPanel] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [showAddStaff, setShowAddStaff] = useState(false);
+  const [showDeployPicker, setShowDeployPicker] = useState(false);
 
   // AI Summarization State
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summaryText, setSummaryText] = useState('');
   const [summaryError, setSummaryError] = useState<string | null>(null);
 
-  const activeIncident = selectedIncident ? incidents.find((i) => i.id === selectedIncident.id) || incidents[0] : incidents[0];
+  const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
+
+  // Keep the selection valid as the incidents list mutates (resolve/realtime).
+  React.useEffect(() => {
+    if (incidents.length === 0) {
+      if (selectedIncidentId !== null) setSelectedIncidentId(null);
+      return;
+    }
+    if (!selectedIncidentId || !incidents.find((i) => i.id === selectedIncidentId)) {
+      setSelectedIncidentId(incidents[0].id);
+    }
+  }, [incidents, selectedIncidentId]);
+
+  const activeIncident = selectedIncidentId ? incidents.find((i) => i.id === selectedIncidentId) ?? incidents[0] : incidents[0];
   const deployedStaff = activeIncident ? staff.filter((s) => s.currentIncident === activeIncident.id) : [];
+  const availableStaff = staff.filter((s) => s.status === 'available' && !s.currentIncident);
   const affectedGuests = guests.filter((g) => g.floor === currentFloor);
   const missingGuests = affectedGuests.filter((g) => g.status === 'missing');
+
+  // Live floor-plan data: incidents currently on the visible floor + their staff.
+  const floorIncidents = incidents.filter(
+    (i) => i.location.floor === currentFloor && i.status !== 'resolved'
+  );
+  const alertedRoomIds = new Set(floorIncidents.map((i) => i.location.room));
+  const floorStaff = staff.filter((s) => s.location.floor === currentFloor);
+
+  // Map active incidents on this floor for pathfinding
+  const activeIncidentsInfo = React.useMemo(() => {
+    return floorIncidents.map((inc) => ({
+      room: inc.location.room,
+      type: inc.type,
+      severity: inc.severity,
+    }));
+  }, [floorIncidents]);
+
+  // Check if elevators should be disabled
+  const hasFireHazmatWeather = React.useMemo(() => {
+    return activeIncidentsInfo.some(
+      (inc) =>
+        inc.type === 'fire' ||
+        inc.type === 'hazmat' ||
+        inc.type === 'weather'
+    );
+  }, [activeIncidentsInfo]);
+
+  // Compute safe paths from all rooms to exits
+  const roomPaths = React.useMemo(() => {
+    const paths: Record<string, { path: { x: number; y: number }[]; exitId: string } | null> = {};
+    const rooms = ['1401', '1402', '1403', '1404', '1405', '1406', '1407', '1408', '1409', '1410', '1411', '1412'];
+    rooms.forEach((r) => {
+      paths[r] = computeSafePath(r, activeIncidentsInfo);
+    });
+    return paths;
+  }, [activeIncidentsInfo]);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -316,27 +370,40 @@ export default function CommandCenter() {
             <text x="390" y="210" textAnchor="middle" fontSize="11" fill="#94a3b8" fontWeight="500" fontFamily="Inter">MAIN CORRIDOR</text>
 
             {/* Rooms */}
-            {floorRooms.map((room) => (
-              <g key={room.id}>
-                <rect
-                  x={room.x} y={room.y} width={room.w} height={room.h}
-                  fill={room.alert ? '#fef2f2' : '#ffffff'}
-                  stroke={room.alert ? '#b41719' : '#e2e8f0'}
-                  strokeWidth={room.alert ? 2 : 1}
-                  rx="4"
-                  className="room-hover"
-                />
-                <text x={room.x + room.w / 2} y={room.y + room.h / 2 + 4} textAnchor="middle" fontSize="12" fill={room.alert ? '#b41719' : '#64748b'} fontWeight={room.alert ? '700' : '500'} fontFamily="Inter">
-                  {room.label}
-                </text>
-                {/* Room status indicators */}
-                {room.id === '1401' && (
-                  <circle cx={room.x + room.w - 10} cy={room.y + 10} r="4" fill="#ef4444">
-                    <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" />
-                  </circle>
-                )}
-              </g>
-            ))}
+            {floorRooms.map((room) => {
+              const isAlerted = alertedRoomIds.has(room.id);
+              const roomIncident = floorIncidents.find((i) => i.location.room === room.id);
+              return (
+                <g
+                  key={room.id}
+                  className="cursor-pointer"
+                  onMouseEnter={() => setHoveredRoomId(room.id)}
+                  onMouseLeave={() => setHoveredRoomId(null)}
+                  onClick={() => {
+                    if (roomIncident) {
+                      setSelectedIncidentId(roomIncident.id);
+                    }
+                  }}
+                >
+                  <rect
+                    x={room.x} y={room.y} width={room.w} height={room.h}
+                    fill={isAlerted ? '#fef2f2' : '#ffffff'}
+                    stroke={isAlerted ? '#b41719' : '#e2e8f0'}
+                    strokeWidth={isAlerted ? 2 : 1}
+                    rx="4"
+                    className="room-hover"
+                  />
+                  <text x={room.x + room.w / 2} y={room.y + room.h / 2 + 4} textAnchor="middle" fontSize="12" fill={isAlerted ? '#b41719' : '#64748b'} fontWeight={isAlerted ? '700' : '500'} fontFamily="Inter">
+                    {room.label}
+                  </text>
+                  {isAlerted && (
+                    <circle cx={room.x + room.w - 10} cy={room.y + 10} r="4" fill="#ef4444">
+                      <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" />
+                    </circle>
+                  )}
+                </g>
+              );
+            })}
 
             {/* Facilities */}
             {facilities.map((f, i) => (
@@ -346,76 +413,135 @@ export default function CommandCenter() {
               </g>
             ))}
 
-            {/* Fire Incident Marker */}
-            <g>
-              <circle cx="210" cy="95" r="22" fill="#b41719" opacity="0.12">
-                <animate attributeName="r" values="22;30;22" dur="2s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.12;0.04;0.12" dur="2s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="210" cy="95" r="14" fill="#b41719" />
-              <text x="210" y="99" textAnchor="middle" fontSize="14" fill="white" fontFamily="Material Symbols Outlined">🔥</text>
-            </g>
+            {/* Live incident markers — one pulse per active incident on this floor */}
+            {floorIncidents.map((inc) => {
+              const room = floorRooms.find((r) => r.id === inc.location.room);
+              const cx = room ? room.x + room.w / 2 : (inc.location.coordinates?.x ?? 200);
+              const cy = room ? room.y + room.h / 2 : (inc.location.coordinates?.y ?? 100);
+              const color = inc.severity >= 4 ? '#b41719' : inc.severity >= 3 ? '#dc2626' : inc.severity >= 2 ? '#f59e0b' : '#0ea5e9';
+              return (
+                <g key={`inc-${inc.id}`}>
+                  <circle cx={cx} cy={cy} r="22" fill={color} opacity="0.12">
+                    <animate attributeName="r" values="22;30;22" dur="2s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.12;0.04;0.12" dur="2s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx={cx} cy={cy} r="14" fill={color} />
+                  <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fill="white" fontWeight="700" fontFamily="Inter">
+                    {inc.type === 'fire' ? '🔥' : inc.type === 'medical' ? '＋' : inc.type === 'security' ? '!' : '⚠'}
+                  </text>
+                </g>
+              );
+            })}
 
-            {/* Staff markers */}
-            {/* Unit 04 — On Scene */}
-            <g>
-              <circle cx="280" cy="190" r="10" fill="#0052cc" />
-              <text x="280" y="194" textAnchor="middle" fontSize="8" fill="white" fontWeight="700" fontFamily="Inter">04</text>
-              <rect x="295" y="180" width="110" height="22" rx="11" fill="white" stroke="#e2e8f0" strokeWidth="1" />
-              <circle cx="304" cy="191" r="4" fill="#0052cc" />
-              <text x="312" y="195" fontSize="9" fill="#1e293b" fontWeight="600" fontFamily="Inter">Unit 04 (Maint.)</text>
-            </g>
+            {/* Live staff markers — color reflects status */}
+            {floorStaff.map((s) => {
+              const cx = s.location.x;
+              const cy = s.location.y;
+              const fill =
+                s.status === 'deployed' ? '#0052cc' :
+                s.status === 'en-route' ? '#525f73' :
+                s.status === 'available' ? '#10b981' :
+                '#94a3b8';
+              const label = s.unit.replace('Unit ', '').slice(0, 3);
+              return (
+                <g key={`staff-${s.id}`}>
+                  <circle cx={cx} cy={cy} r="10" fill={fill} />
+                  <text x={cx} y={cy + 4} textAnchor="middle" fontSize="8" fill="white" fontWeight="700" fontFamily="Inter">{label}</text>
+                  <rect x={cx + 15} y={cy - 10} width="120" height="22" rx="11" fill="white" stroke="#e2e8f0" strokeWidth="1" />
+                  <circle cx={cx + 24} cy={cy + 1} r="4" fill={fill} />
+                  <text x={cx + 32} y={cy + 5} fontSize="9" fill="#1e293b" fontWeight="600" fontFamily="Inter">{s.unit} ({s.role})</text>
+                </g>
+              );
+            })}
 
-            {/* Unit 12 — En Route */}
-            <g>
-              <circle cx="500" cy="190" r="10" fill="#525f73" />
-              <text x="500" y="194" textAnchor="middle" fontSize="8" fill="white" fontWeight="700" fontFamily="Inter">12</text>
-              <rect x="515" y="180" width="120" height="22" rx="11" fill="white" stroke="#e2e8f0" strokeWidth="1" />
-              <circle cx="524" cy="191" r="4" fill="#525f73" />
-              <text x="532" y="195" fontSize="9" fill="#1e293b" fontWeight="600" fontFamily="Inter">Unit 12 (Security)</text>
-            </g>
+            {/* Dynamic Evacuation Routes */}
+            {floorIncidents.length > 0 &&
+              Object.entries(roomPaths).map(([roomId, pathData]) => {
+                if (!pathData) return null;
 
-            {/* Evacuation Route */}
-            <path
-              d="M 210 130 L 210 200 L 390 200 L 390 260 L 760 260 L 760 200"
-              fill="none"
-              stroke="#00C853"
-              strokeWidth="3"
-              strokeDasharray="8 6"
-              markerEnd="url(#arrowhead)"
-              opacity="0.7"
-            >
-              <animate attributeName="stroke-dashoffset" values="0;-28" dur="1.5s" repeatCount="indefinite" />
-            </path>
-            <text x="550" y="250" fontSize="9" fill="#00C853" fontWeight="600" fontFamily="Inter">EVACUATION ROUTE →</text>
+                const room = floorRooms.find((r) => r.id === roomId);
+                if (!room) return null;
 
-            {/* Missing guest indicator */}
-            <g>
-              <circle cx="90" cy="95" r="8" fill="#f59e0b" opacity="0.8">
-                <animate attributeName="opacity" values="0.8;0.3;0.8" dur="1.2s" repeatCount="indefinite" />
-              </circle>
-              <text x="90" y="99" textAnchor="middle" fontSize="10" fill="white" fontWeight="700">!</text>
-              <text x="90" y="55" textAnchor="middle" fontSize="8" fill="#f59e0b" fontWeight="600" fontFamily="Inter">MISSING</text>
-              <text x="90" y="45" textAnchor="middle" fontSize="8" fill="#f59e0b" fontWeight="500" fontFamily="Inter">Rm 1401</text>
-            </g>
+                const startPoint = { x: room.x + room.w / 2, y: room.y + room.h / 2 };
+                const coords = [startPoint, ...pathData.path];
+
+                const isHovered = hoveredRoomId === roomId;
+                const isIncidentRoom = activeIncident && activeIncident.location.room === roomId;
+                const isHighlighted = isHovered || isIncidentRoom;
+
+                const d = coords.map((c, idx) => `${idx === 0 ? 'M' : 'L'} ${c.x} ${c.y}`).join(' ');
+
+                return (
+                  <g key={`path-${roomId}`} style={{ pointerEvents: 'none' }}>
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="#00C853"
+                      strokeWidth={isHighlighted ? 4 : 1.5}
+                      strokeDasharray={isHighlighted ? '8 4' : '4 4'}
+                      strokeOpacity={isHighlighted ? 0.95 : 0.25}
+                      markerEnd={isHighlighted ? 'url(#arrowhead)' : undefined}
+                      className={isHighlighted ? 'drop-shadow-[0_0_8px_rgba(0,200,83,0.5)]' : ''}
+                    >
+                      {isHighlighted && (
+                        <animate
+                          attributeName="stroke-dashoffset"
+                          values="0;-24"
+                          dur="1.2s"
+                          repeatCount="indefinite"
+                        />
+                      )}
+                    </path>
+                  </g>
+                );
+              })}
+
+            {floorIncidents.length > 0 && (
+              <text x="550" y="210" fontSize="9" fill="#00C853" fontWeight="600" fontFamily="Inter">DYNAMIC EVACUATION ROUTES ENABLED</text>
+            )}
+
+            {/* Missing-guest indicators */}
+            {affectedGuests.filter((g) => g.status === 'missing').map((g) => {
+              const room = floorRooms.find((r) => r.id === g.room);
+              if (!room) return null;
+              const cx = room.x + 50;
+              const cy = room.y + 35;
+              return (
+                <g key={`miss-${g.id}`}>
+                  <circle cx={cx} cy={cy} r="8" fill="#f59e0b" opacity="0.8">
+                    <animate attributeName="opacity" values="0.8;0.3;0.8" dur="1.2s" repeatCount="indefinite" />
+                  </circle>
+                  <text x={cx} y={cy + 4} textAnchor="middle" fontSize="10" fill="white" fontWeight="700">!</text>
+                  <text x={cx} y={room.y - 8} textAnchor="middle" fontSize="8" fill="#f59e0b" fontWeight="600" fontFamily="Inter">MISSING Rm {g.room}</text>
+                </g>
+              );
+            })}
           </svg>
 
           {/* Map Legend */}
-          <div className="absolute bottom-3 left-3 flex gap-3 text-[10px] text-on-surface-variant bg-surface-container-lowest/90 backdrop-blur-sm rounded-lg px-3 py-2 border border-outline-variant/10">
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-tertiary-container" /> Incident</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-primary-container" /> Staff</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Missing</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-safe" /> Evac Route</span>
+          <div className="absolute bottom-3 left-3 flex flex-col gap-2 bg-surface-container-lowest/90 backdrop-blur-sm rounded-lg px-3 py-2 border border-outline-variant/10">
+            <div className="flex gap-3 text-[10px] text-on-surface-variant">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-tertiary-container" /> Incident</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-primary-container" /> Staff</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Missing</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-[#00C853]" /> Evac Route</span>
+            </div>
+            {hasFireHazmatWeather && (
+              <div className="flex items-center gap-1 text-[9px] text-amber-500 font-bold border-t border-outline-variant/10 pt-1.5 animate-pulse">
+                <span className="material-symbols-outlined text-[12px]">warning</span>
+                Elevators disabled for evacuation
+              </div>
+            )}
           </div>
 
           {/* Incident quick-select tabs */}
-          <div className="absolute top-3 left-3 flex gap-2">
+          <div className="absolute top-3 left-3 flex gap-2 flex-wrap max-w-[60%]">
             {incidents.map((inc) => (
               <button
                 key={inc.id}
-                onClick={() => { setSelectedIncident(inc); setCurrentFloor(inc.location.floor); }}
+                onClick={() => { setSelectedIncidentId(inc.id); setCurrentFloor(inc.location.floor); }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-sm ${
-                  selectedIncident.id === inc.id
+                  selectedIncidentId === inc.id
                     ? 'bg-tertiary-container text-white shadow-tertiary-container/30'
                     : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-variant border border-outline-variant/20'
                 }`}
@@ -423,6 +549,7 @@ export default function CommandCenter() {
                 <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>{typeIcon(inc.type)}</span>
                 {inc.id}
                 {(inc.status === 'active') && <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />}
+                {(inc.status === 'resolved') && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
               </button>
             ))}
           </div>
@@ -553,10 +680,31 @@ export default function CommandCenter() {
 
         {/* Deployed Units */}
         <div className="p-6 border-b border-outline-variant/10">
-          <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider mb-4 flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px]">engineering</span>
-            Deployed Units ({deployedStaff.length})
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]">engineering</span>
+              Deployed Units ({deployedStaff.length})
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowDeployPicker(true)}
+                disabled={!activeIncident || availableStaff.length === 0}
+                className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-primary text-on-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                title={availableStaff.length === 0 ? 'No available units' : 'Deploy a unit'}
+              >
+                <span className="material-symbols-outlined text-[16px]">add</span>
+                Deploy
+              </button>
+              <button
+                onClick={() => setShowAddStaff(true)}
+                className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-surface-container-high text-on-surface hover:bg-surface-variant transition-colors"
+                title="Add a new staff member to the roster"
+              >
+                <span className="material-symbols-outlined text-[16px]">person_add</span>
+                Add Staff
+              </button>
+            </div>
+          </div>
           <div className="flex flex-col gap-3">
             {deployedStaff.map((s) => (
               <div key={s.id} className="flex items-center justify-between p-3 bg-surface-container-low rounded-lg hover:bg-surface-container-high transition-colors">
@@ -566,10 +714,16 @@ export default function CommandCenter() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-on-surface">{s.unit} ({s.role})</p>
-                    <p className="text-xs text-on-surface-variant">{s.eta || 'Deployed'}</p>
+                    <p className="text-xs text-on-surface-variant">{s.eta || 'Deployed'} — {s.name}</p>
                   </div>
                 </div>
-                <span className="material-symbols-outlined text-primary text-[20px]">radio</span>
+                <button
+                  onClick={() => { recallStaff(s.id); showToast(`${s.unit} recalled to standby.`); }}
+                  className="text-xs font-semibold text-on-surface-variant hover:text-tertiary px-2 py-1 rounded hover:bg-surface-container transition-colors"
+                  title="Recall this unit"
+                >
+                  Recall
+                </button>
               </div>
             ))}
 
@@ -577,6 +731,26 @@ export default function CommandCenter() {
               <p className="text-sm text-on-surface-variant italic">No units deployed to this incident.</p>
             )}
           </div>
+
+          {/* Incident control row */}
+          {activeIncident && activeIncident.status !== 'resolved' && (
+            <div className="grid grid-cols-3 gap-2 mt-4">
+              <button
+                onClick={() => { respondToIncident(activeIncident.id); showToast('Status set to responding.'); }}
+                disabled={activeIncident.status === 'responding'}
+                className="text-[11px] font-semibold px-2 py-1.5 rounded-md bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 disabled:opacity-40 transition-colors"
+              >Respond</button>
+              <button
+                onClick={() => { escalateIncident(activeIncident.id); showToast('Severity escalated.'); }}
+                disabled={activeIncident.severity >= 4}
+                className="text-[11px] font-semibold px-2 py-1.5 rounded-md bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 disabled:opacity-40 transition-colors"
+              >Escalate</button>
+              <button
+                onClick={() => { resolveIncident(activeIncident.id); showToast('Incident resolved.'); }}
+                className="text-[11px] font-semibold px-2 py-1.5 rounded-md bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 transition-colors"
+              >Resolve</button>
+            </div>
+          )}
         </div>
 
         {/* Timeline */}
@@ -629,6 +803,158 @@ export default function CommandCenter() {
           </div>
         </div>
       </aside>
+
+      {/* Deploy Unit Picker */}
+      <AnimatePresence>
+        {showDeployPicker && activeIncident && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowDeployPicker(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-surface-container-lowest text-on-surface rounded-2xl shadow-2xl w-full max-w-md p-6 border border-outline-variant/20"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold">Deploy Unit to {activeIncident.id}</h3>
+                <button onClick={() => setShowDeployPicker(false)} className="text-on-surface-variant hover:text-on-surface">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <p className="text-xs text-on-surface-variant mb-4">{activeIncident.title} • {activeIncident.location.building}, Floor {activeIncident.location.floor}</p>
+              {availableStaff.length === 0 ? (
+                <p className="text-sm text-on-surface-variant italic">All units are currently engaged.</p>
+              ) : (
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {availableStaff.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={async () => {
+                        await deployStaff(s.id, activeIncident.id, { eta: 'ETA 2m' });
+                        showToast(`${s.unit} dispatched to ${activeIncident.id}.`);
+                        setShowDeployPicker(false);
+                      }}
+                      className="w-full flex items-center justify-between p-3 bg-surface-container-low hover:bg-surface-container-high rounded-lg transition-colors text-left"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold">{s.unit} — {s.name}</p>
+                        <p className="text-xs text-on-surface-variant">{s.role} • Floor {s.location.floor}</p>
+                      </div>
+                      <span className="material-symbols-outlined text-primary">send</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Staff modal */}
+      <AnimatePresence>
+        {showAddStaff && (
+          <AddStaffModal
+            onClose={() => setShowAddStaff(false)}
+            onSubmit={async (input) => {
+              const created = await addStaff(input);
+              if (created) {
+                showToast(`${created.unit} added to roster.`);
+                setShowAddStaff(false);
+              } else {
+                showToast('Failed to add staff. Check console.');
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// -------- Add Staff modal --------
+function AddStaffModal({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void;
+  onSubmit: (input: { name: string; role: 'security' | 'maintenance' | 'medical' | 'management' | 'housekeeping' | 'engineering'; unit?: string; building?: string; floor?: number; phone?: string }) => Promise<void>;
+}) {
+  const [name, setName] = useState('');
+  const [role, setRole] = useState<'security' | 'maintenance' | 'medical' | 'management' | 'housekeeping' | 'engineering'>('security');
+  const [unit, setUnit] = useState('');
+  const [building, setBuilding] = useState('Tower A');
+  const [floor, setFloor] = useState(1);
+  const [phone, setPhone] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[300] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <motion.form
+        initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (!name.trim()) return;
+          setSubmitting(true);
+          await onSubmit({ name: name.trim(), role, unit: unit.trim() || undefined, building, floor, phone: phone.trim() || undefined });
+          setSubmitting(false);
+        }}
+        className="bg-surface-container-lowest text-on-surface rounded-2xl shadow-2xl w-full max-w-md p-6 border border-outline-variant/20 space-y-3"
+      >
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-bold">Add Staff Member</h3>
+          <button type="button" onClick={onClose} className="text-on-surface-variant hover:text-on-surface">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Full name
+          <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus
+            className="mt-1 w-full px-3 py-2 rounded-md bg-surface-container-low border border-outline-variant/20 text-sm focus:ring-2 focus:ring-primary outline-none" />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Role
+            <select value={role} onChange={(e) => setRole(e.target.value as any)}
+              className="mt-1 w-full px-3 py-2 rounded-md bg-surface-container-low border border-outline-variant/20 text-sm">
+              <option value="security">Security</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="medical">Medical</option>
+              <option value="management">Management</option>
+              <option value="housekeeping">Housekeeping</option>
+              <option value="engineering">Engineering</option>
+            </select>
+          </label>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Unit (optional)
+            <input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="Unit 14"
+              className="mt-1 w-full px-3 py-2 rounded-md bg-surface-container-low border border-outline-variant/20 text-sm" />
+          </label>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Building
+            <input value={building} onChange={(e) => setBuilding(e.target.value)}
+              className="mt-1 w-full px-3 py-2 rounded-md bg-surface-container-low border border-outline-variant/20 text-sm" />
+          </label>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Floor
+            <input type="number" min={1} max={50} value={floor} onChange={(e) => setFloor(parseInt(e.target.value || '1'))}
+              className="mt-1 w-full px-3 py-2 rounded-md bg-surface-container-low border border-outline-variant/20 text-sm" />
+          </label>
+        </div>
+        <label className="block text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Phone (optional)
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1-555-0100"
+            className="mt-1 w-full px-3 py-2 rounded-md bg-surface-container-low border border-outline-variant/20 text-sm" />
+        </label>
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-md text-sm font-semibold bg-surface-container-high hover:bg-surface-variant">Cancel</button>
+          <button type="submit" disabled={submitting || !name.trim()} className="px-4 py-2 rounded-md text-sm font-semibold bg-primary text-on-primary hover:bg-primary/90 disabled:opacity-50">
+            {submitting ? 'Adding…' : 'Add'}
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
   );
 }

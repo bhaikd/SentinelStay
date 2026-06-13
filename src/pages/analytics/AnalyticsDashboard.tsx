@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, BarChart, Bar,
 } from 'recharts';
-import { mockAnalyticsData } from '../../data/mockData';
+import { useAppStore } from '../../store/appStore';
+import { buildAnalytics } from '../../utils/analytics';
 
 export default function AnalyticsDashboard() {
-  const [dateRange, setDateRange] = useState('6m');
-  const { responseTimeTrend, incidentsByType, incidentsByFloor, drillPerformance, kpis } = mockAnalyticsData;
+  const [dateRange, setDateRange] = useState<'1m' | '3m' | '6m' | '1y'>('6m');
+  const incidents = useAppStore((s) => s.incidents);
+  const { responseTimeTrend, incidentsByType, incidentsByFloor, drillPerformance, kpis, recent } =
+    useMemo(() => buildAnalytics(incidents, dateRange), [incidents, dateRange]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -25,7 +28,7 @@ export default function AnalyticsDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <div className="flex bg-slate-800 rounded-lg p-0.5 gap-0.5">
-            {['1m', '3m', '6m', '1y'].map((r) => (
+            {(['1m', '3m', '6m', '1y'] as const).map((r) => (
               <button
                 key={r}
                 onClick={() => setDateRange(r)}
@@ -58,7 +61,7 @@ export default function AnalyticsDashboard() {
             { label: 'Ack Time', value: kpis.alertAckTime, icon: 'notifications', color: 'text-emerald-400', note: 'Target: 15s' },
             { label: 'False Positive', value: kpis.falsePositiveRate, icon: 'block', color: 'text-emerald-400', note: 'Target: <5%' },
             { label: 'Staff Adoption', value: kpis.staffAdoption, icon: 'groups', color: 'text-emerald-400', note: 'Target: >90%' },
-            { label: 'Guest Score', value: `${kpis.guestSatisfaction}/5`, icon: 'star', color: 'text-amber-400', note: 'Target: 4.5' },
+            { label: 'Guest Score', value: kpis.guestSatisfaction === '—' ? '—' : `${kpis.guestSatisfaction}/5`, icon: 'star', color: 'text-amber-400', note: 'Target: 4.5' },
             { label: 'Uptime', value: kpis.uptime, icon: 'cloud_done', color: 'text-emerald-400', note: 'SLA: 99.99%' },
           ].map((kpi, i) => (
             <motion.div
@@ -238,13 +241,13 @@ export default function AnalyticsDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/50">
-                {[
-                  { id: 'INC-042', type: 'Fire', location: 'Tower A, Fl 14', response: 'Ongoing', status: 'Active', severity: 4 },
-                  { id: 'INC-041', type: 'Medical', location: 'Tower A, Fl 3', response: '8m 12s', status: 'Responding', severity: 3 },
-                  { id: 'INC-040', type: 'Security', location: 'Tower B, Fl 1', response: '5m 45s', status: 'Responding', severity: 2 },
-                  { id: 'INC-039', type: 'Medical', location: 'Tower A, Fl 7', response: '1m 52s', status: 'Resolved', severity: 2 },
-                  { id: 'INC-038', type: 'Other', location: 'Tower B, Fl 3', response: '3m 11s', status: 'Resolved', severity: 1 },
-                ].map((row) => (
+                {recent.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-500 text-xs">
+                      No incidents in the selected window.
+                    </td>
+                  </tr>
+                ) : recent.map((row) => (
                   <tr key={row.id} className="hover:bg-slate-800/30 transition-colors">
                     <td className="py-3 font-mono text-slate-300">{row.id}</td>
                     <td className="py-3 text-slate-300">{row.type}</td>
@@ -252,8 +255,8 @@ export default function AnalyticsDashboard() {
                     <td className="py-3 font-mono text-slate-300">{row.response}</td>
                     <td className="py-3">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                        row.status === 'Active' ? 'bg-red-500/20 text-red-400' :
-                        row.status === 'Responding' ? 'bg-amber-500/20 text-amber-400' :
+                        row.status === 'active' ? 'bg-red-500/20 text-red-400' :
+                        row.status === 'responding' ? 'bg-amber-500/20 text-amber-400' :
                         'bg-emerald-500/20 text-emerald-400'
                       }`}>
                         {row.status.toUpperCase()}

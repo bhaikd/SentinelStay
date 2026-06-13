@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { api } from '../../services/api';
 
 const categories = [
   { id: 'medical', label: 'Medical', icon: 'medical_services', color: 'from-red-500 to-red-700', desc: 'Injury, illness, or health crisis' },
@@ -9,10 +10,14 @@ const categories = [
   { id: 'other', label: 'Other', icon: 'warning', color: 'from-amber-500 to-amber-700', desc: 'Gas leak, flood, structural, or other' },
 ];
 
+type Category = 'medical' | 'fire' | 'security' | 'other';
+
 export default function SOSPortal() {
   const [step, setStep] = useState<'ready' | 'category' | 'confirm' | 'active'>('ready');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [silentMode, setSilentMode] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const roomNumber = '1402';
@@ -21,14 +26,30 @@ export default function SOSPortal() {
 
   const handleSOS = () => setStep('category');
 
-  const handleCategorySelect = (cat: string) => {
+  const handleCategorySelect = (cat: Category) => {
     setSelectedCategory(cat);
     setStep('confirm');
   };
 
-  const handleConfirm = () => {
-    setStep('active');
-    setTimeout(() => navigate('/guest/chat'), 2000);
+  const handleConfirm = async () => {
+    if (!selectedCategory || submitting) return;
+    setSubmitError(null);
+    setSubmitting(true);
+    try {
+      await api.createSOSAlert({
+        category: selectedCategory,
+        room: roomNumber,
+        floor: floorNumber,
+        building,
+        silent: silentMode,
+      });
+      setStep('active');
+      setTimeout(() => navigate('/guest/chat'), 2000);
+    } catch (err: any) {
+      setSubmitError(err?.message || 'Failed to send alert. Please try again or call the front desk.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -99,7 +120,7 @@ export default function SOSPortal() {
               {categories.map((cat) => (
                 <button
                   key={cat.id}
-                  onClick={() => handleCategorySelect(cat.id)}
+                  onClick={() => handleCategorySelect(cat.id as Category)}
                   className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-5 text-left transition-all hover:bg-white/10 hover:border-white/20 active:scale-95"
                 >
                   <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${cat.color} flex items-center justify-center mb-3 shadow-lg group-hover:scale-110 transition-transform`}>
@@ -148,10 +169,17 @@ export default function SOSPortal() {
 
             <button
               onClick={handleConfirm}
-              className="w-full bg-gradient-to-r from-red-500 to-red-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-500/30 hover:shadow-xl transition-all active:scale-[0.98] mb-3"
+              disabled={submitting}
+              className="w-full bg-gradient-to-r from-red-500 to-red-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-500/30 hover:shadow-xl transition-all active:scale-[0.98] mb-3 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              SEND ALERT NOW
+              {submitting && <span className="material-symbols-outlined animate-spin">autorenew</span>}
+              {submitting ? 'SENDING…' : 'SEND ALERT NOW'}
             </button>
+            {submitError && (
+              <div className="text-xs text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg p-2 mb-2" role="alert">
+                {submitError}
+              </div>
+            )}
             <button onClick={() => setStep('category')} className="text-sm text-blue-300/50 hover:text-blue-300">
               Cancel
             </button>

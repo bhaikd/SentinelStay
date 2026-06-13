@@ -1,23 +1,54 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { mockProperties } from '../../data/mockData';
 import { useAppStore } from '../../store/appStore';
+import { BUILDING, CURRENT_PROPERTY } from '../../config/siteConfig';
+
+interface SiteCard {
+  id: string;
+  name: string;
+  location: string;
+  rooms: number;
+  occupancy: number;
+  activeIncidents: number;
+  staffOnDuty: number;
+  status: 'nominal' | 'alert' | 'critical';
+}
 
 const propertyStatusColor = (s: string) =>
   s === 'critical' ? 'bg-red-500' : s === 'alert' ? 'bg-amber-500' : 'bg-emerald-500';
 
-const propertyBorderColor = (s: string) =>
-  s === 'critical' ? 'border-red-500/30 bg-red-500/5' : s === 'alert' ? 'border-amber-500/30 bg-amber-500/5' : 'border-emerald-500/20 bg-surface-container-lowest';
-
 export default function CorporateDashboard() {
-  const { incidents } = useAppStore();
-  const [selectedProperty, setSelectedProperty] = useState(mockProperties[0]);
+  const { incidents, staff, guests } = useAppStore();
 
-  const totalIncidents = mockProperties.reduce((a, p) => a + p.activeIncidents, 0);
-  const criticalProperties = mockProperties.filter((p) => p.status === 'critical').length;
-  const totalOccupancy = Math.round(mockProperties.reduce((a, p) => a + p.occupancy, 0) / mockProperties.length);
-  const totalRooms = mockProperties.reduce((a, p) => a + p.rooms, 0);
+  const liveProperty: SiteCard = useMemo(() => {
+    const active = incidents.filter((i) => i.status !== 'resolved');
+    const critical = active.filter((i) => i.severity >= 3).length;
+    const onDuty = staff.filter((s) => s.status !== 'off-duty').length;
+    const checkedIn = guests.filter((g) => g.status !== 'checked-out').length;
+    const occupancy = Math.min(100, Math.round((checkedIn / Math.max(BUILDING.rooms, 1)) * 100));
+    const status: SiteCard['status'] = critical > 0 ? 'critical' : active.length > 0 ? 'alert' : 'nominal';
+    return {
+      id: CURRENT_PROPERTY.id,
+      name: CURRENT_PROPERTY.name,
+      location: CURRENT_PROPERTY.location,
+      rooms: BUILDING.rooms,
+      occupancy,
+      activeIncidents: active.length,
+      staffOnDuty: onDuty,
+      status,
+    };
+  }, [incidents, staff, guests]);
+
+  const properties = useMemo(() => [liveProperty], [liveProperty]);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>(liveProperty.id);
+  const selectedProperty = properties.find((p) => p.id === selectedPropertyId) ?? liveProperty;
+
+  const totalIncidents = properties.reduce((a, p) => a + p.activeIncidents, 0);
+  const criticalProperties = properties.filter((p) => p.status === 'critical').length;
+  const totalOccupancy = Math.round(properties.reduce((a, p) => a + p.occupancy, 0) / properties.length);
+  // (totalRooms is informational; not currently displayed but kept for future portfolio rollup)
+  // const totalRooms = properties.reduce((a, p) => a + p.rooms, 0);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -43,7 +74,7 @@ export default function CorporateDashboard() {
         {/* KPI Row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Total Properties', value: mockProperties.length, icon: 'apartment', color: 'text-teal-400', bg: 'bg-teal-500/10' },
+            { label: 'Total Properties', value: properties.length, icon: 'apartment', color: 'text-teal-400', bg: 'bg-teal-500/10' },
             { label: 'Active Incidents', value: totalIncidents, icon: 'crisis_alert', color: 'text-red-400', bg: 'bg-red-500/10' },
             { label: 'Critical Properties', value: criticalProperties, icon: 'warning', color: 'text-amber-400', bg: 'bg-amber-500/10' },
             { label: 'Avg Occupancy', value: `${totalOccupancy}%`, icon: 'bed', color: 'text-blue-400', bg: 'bg-blue-500/10' },
@@ -67,14 +98,14 @@ export default function CorporateDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Property List */}
           <div className="lg:col-span-1 space-y-3">
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Portfolio — {mockProperties.length} Properties</h2>
-            {mockProperties.map((prop, i) => (
+            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Portfolio — {properties.length} Propert{properties.length === 1 ? 'y' : 'ies'} (Live)</h2>
+            {properties.map((prop, i) => (
               <motion.button
                 key={prop.id}
                 initial={{ opacity: 0, x: -16 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.07 }}
-                onClick={() => setSelectedProperty(prop)}
+                onClick={() => setSelectedPropertyId(prop.id)}
                 className={`w-full text-left bg-slate-900 rounded-xl p-4 border transition-all hover:border-slate-600 ${
                   selectedProperty.id === prop.id ? 'border-teal-500/50 ring-1 ring-teal-500/20' : 'border-slate-800'
                 }`}
@@ -159,19 +190,15 @@ export default function CorporateDashboard() {
                   <path d="M 150 80 L 700 80 L 700 300 L 150 300 Z" fill="none" stroke="#475569" strokeWidth="1" />
                 </svg>
 
-                {/* Property pins overlay */}
+                {/* Property pins overlay (single live property + Coming Soon markers) */}
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="relative w-full h-full">
-                    {/* NY */}
-                    <PropertyPin name="Central" location="New York" status="critical" style={{ top: '28%', left: '72%' }} />
-                    {/* Miami */}
-                    <PropertyPin name="Marina" location="Miami" status="nominal" style={{ top: '65%', left: '64%' }} />
-                    {/* LA */}
-                    <PropertyPin name="Pacific" location="Los Angeles" status="alert" style={{ top: '38%', left: '14%' }} />
-                    {/* Chicago */}
-                    <PropertyPin name="Lakeside" location="Chicago" status="nominal" style={{ top: '30%', left: '55%' }} />
-                    {/* DC */}
-                    <PropertyPin name="Capitol" location="Washington D.C." status="nominal" style={{ top: '35%', left: '69%' }} />
+                    <PropertyPin
+                      name={liveProperty.name.replace(/^SentinelStay\s+/, '')}
+                      location={liveProperty.location}
+                      status={liveProperty.status}
+                      style={{ top: '28%', left: '72%' }}
+                    />
                   </div>
                 </div>
 
