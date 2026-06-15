@@ -35,7 +35,7 @@ const facilities = [
 ];
 
 export default function CommandCenter() {
-  const { incidents, staff, guests, currentFloor, setCurrentFloor, elapsedSeconds, addTimelineEvent, addStaff, deployStaff, recallStaff, respondToIncident, escalateIncident, resolveIncident } = useAppStore();
+  const { incidents, staff, guests, currentFloor, setCurrentFloor, elapsedSeconds, addTimelineEvent, addStaff, deployStaff, recallStaff, respondToIncident, escalateIncident, resolveIncident, alerts, initiateRollCall, terminateRollCall } = useAppStore();
 
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(incidents[0]?.id ?? null);
   const [logInput, setLogInput] = useState('');
@@ -103,6 +103,23 @@ export default function CommandCenter() {
     });
     return paths;
   }, [activeIncidentsInfo]);
+
+  // Safety roll call check calculations
+  const safeGuests = affectedGuests.filter((g) => g.status === 'evacuated');
+  const needsHelpGuests = affectedGuests.filter((g) => g.status === 'missing');
+  const unaccountedGuests = affectedGuests.filter(
+    (g) => g.status !== 'evacuated' && g.status !== 'missing' && g.status !== 'checked-out'
+  );
+  const completionPercent = affectedGuests.length > 0
+    ? Math.round(((safeGuests.length + needsHelpGuests.length) / affectedGuests.length) * 100)
+    : 0;
+
+  const isRollCallActive = alerts.some((a) => {
+    if (a.type !== 'system' || a.acknowledged) return false;
+    const match = a.message.match(/Floor (\d+)/);
+    const alertFloor = match ? parseInt(match[1], 10) : null;
+    return alertFloor === currentFloor;
+  });
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -373,6 +390,28 @@ export default function CommandCenter() {
             {floorRooms.map((room) => {
               const isAlerted = alertedRoomIds.has(room.id);
               const roomIncident = floorIncidents.find((i) => i.location.room === room.id);
+
+              // Color rooms dynamically based on guest safety check status during active roll calls
+              const roomGuests = guests.filter((g) => g.room === room.id && g.floor === currentFloor);
+              const hasTrapped = roomGuests.some((g) => g.status === 'missing');
+              const allSafe = roomGuests.length > 0 && roomGuests.every((g) => g.status === 'evacuated');
+
+              let fill = isAlerted ? '#fef2f2' : '#ffffff';
+              let stroke = isAlerted ? '#b41719' : '#e2e8f0';
+              let strokeWidth = isAlerted ? 2 : 1;
+
+              if (isRollCallActive) {
+                if (hasTrapped) {
+                  fill = '#fee2e2'; // Pulsing red-ish overlay
+                  stroke = '#ef4444'; // Red border
+                  strokeWidth = 3;
+                } else if (allSafe) {
+                  fill = '#ecfdf5'; // Light green fill
+                  stroke = '#10b981'; // Green border
+                  strokeWidth = 2;
+                }
+              }
+
               return (
                 <g
                   key={room.id}
@@ -387,13 +426,13 @@ export default function CommandCenter() {
                 >
                   <rect
                     x={room.x} y={room.y} width={room.w} height={room.h}
-                    fill={isAlerted ? '#fef2f2' : '#ffffff'}
-                    stroke={isAlerted ? '#b41719' : '#e2e8f0'}
-                    strokeWidth={isAlerted ? 2 : 1}
+                    fill={fill}
+                    stroke={stroke}
+                    strokeWidth={strokeWidth}
                     rx="4"
                     className="room-hover"
                   />
-                  <text x={room.x + room.w / 2} y={room.y + room.h / 2 + 4} textAnchor="middle" fontSize="12" fill={isAlerted ? '#b41719' : '#64748b'} fontWeight={isAlerted ? '700' : '500'} fontFamily="Inter">
+                  <text x={room.x + room.w / 2} y={room.y + room.h / 2 + 4} textAnchor="middle" fontSize="12" fill={hasTrapped && isRollCallActive ? '#ef4444' : allSafe && isRollCallActive ? '#10b981' : isAlerted ? '#b41719' : '#64748b'} fontWeight={isAlerted || hasTrapped || allSafe ? '700' : '500'} fontFamily="Inter">
                     {room.label}
                   </text>
                   {isAlerted && (
@@ -571,6 +610,86 @@ export default function CommandCenter() {
             <button onClick={() => setShowGuestPanel(false)} className="text-on-surface-variant hover:text-on-surface">
               <span className="material-symbols-outlined text-lg">close</span>
             </button>
+          </div>
+
+          {/* Safety Roll Call Control Center Panel */}
+          <div className="bg-surface-container-low border border-outline-variant/15 rounded-xl p-3.5 mb-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-bold text-on-surface uppercase tracking-wider flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${isRollCallActive ? 'bg-red-500 animate-pulse' : 'bg-slate-400'}`} />
+                Roll Call Check-in
+              </h4>
+              <span className="text-[10px] text-on-surface-variant font-medium">Tower A, F{currentFloor}</span>
+            </div>
+
+            {isRollCallActive ? (
+              <div className="space-y-3">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5 text-xs text-red-500 flex flex-col gap-1.5">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm animate-spin">sync</span>
+                    BROADCAST LIVE
+                  </div>
+                  <p className="text-[10.5px] text-on-surface-variant leading-relaxed">
+                    Guests on Floor {currentFloor} are prompted to report their status.
+                  </p>
+                </div>
+
+                {/* Progress bar */}
+                <div>
+                  <div className="flex justify-between text-[10px] font-bold text-on-surface-variant mb-1">
+                    <span>PROGRESS</span>
+                    <span>{completionPercent}% ({safeGuests.length + needsHelpGuests.length}/{affectedGuests.length})</span>
+                  </div>
+                  <div className="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden flex">
+                    <div className="bg-emerald-500 h-full" style={{ width: `${affectedGuests.length > 0 ? (safeGuests.length / affectedGuests.length) * 100 : 0}%` }} />
+                    <div className="bg-red-500 h-full" style={{ width: `${affectedGuests.length > 0 ? (needsHelpGuests.length / affectedGuests.length) * 100 : 0}%` }} />
+                  </div>
+                </div>
+
+                {/* Stats breakdown grid */}
+                <div className="grid grid-cols-3 gap-1.5 text-center">
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded p-1.5">
+                    <div className="text-sm font-black text-emerald-600">{safeGuests.length}</div>
+                    <div className="text-[9px] font-semibold text-emerald-700/80">SAFE</div>
+                  </div>
+                  <div className="bg-red-500/10 border border-red-500/20 rounded p-1.5">
+                    <div className="text-sm font-black text-red-500">{needsHelpGuests.length}</div>
+                    <div className="text-[9px] font-semibold text-red-600/80">TRAPPED</div>
+                  </div>
+                  <div className="bg-slate-500/10 border border-slate-500/20 rounded p-1.5">
+                    <div className="text-sm font-black text-on-surface-variant">{unaccountedGuests.length}</div>
+                    <div className="text-[9px] font-semibold text-on-surface-variant">NO RESP</div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    await terminateRollCall('Tower A', currentFloor);
+                    showToast('Safety roll call broadcast ended.');
+                  }}
+                  className="w-full py-2 bg-slate-600 hover:bg-slate-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-sm">cancel</span>
+                  End Safety Check
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-[10.5px] text-on-surface-variant leading-relaxed">
+                  Broadcast an emergency check-in prompt to lock screens and verify guest status.
+                </p>
+                <button
+                  onClick={async () => {
+                    await initiateRollCall('Tower A', currentFloor);
+                    showToast('Safety roll call broadcast active.');
+                  }}
+                  className="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-sm">emergency_share</span>
+                  Start Safety Broadcast
+                </button>
+              </div>
+            )}
           </div>
 
           {missingGuests.length > 0 && (

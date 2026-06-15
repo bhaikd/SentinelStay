@@ -27,6 +27,9 @@ interface AppState {
   // Guests
   guests: Guest[];
   updateGuestStatus: (guestId: string, status: Guest['status']) => void;
+  initiateRollCall: (building: string, floor: number) => Promise<void>;
+  terminateRollCall: (building: string, floor: number) => Promise<void>;
+  submitGuestCheckIn: (guestId: string, status: 'evacuated' | 'missing', name: string, room: string) => Promise<void>;
 
   // Alerts
   alerts: AlertNotification[];
@@ -291,6 +294,122 @@ export const useAppStore = create<AppState>((set, get) => ({
         g.id === guestId ? { ...g, status: guestStatus } : g
       ),
     }));
+  },
+
+  initiateRollCall: async (building, floor) => {
+    const now = new Date();
+    const timeStr = now.toTimeString().slice(0, 8);
+    const alertId = crypto.randomUUID();
+    const newAlert = {
+      id: alertId,
+      type: 'system' as const,
+      severity: 3 as 1 | 2 | 3 | 4,
+      message: `Safety check roll call initiated for Floor ${floor}`,
+      location: `${building}, Floor ${floor}`,
+      timestamp: timeStr,
+      acknowledged: false,
+    };
+    set((state) => ({
+      alerts: [
+        { ...newAlert, created_at: now.toISOString() } as AlertNotification,
+        ...state.alerts,
+      ],
+    }));
+    const { error } = await supabase.from('alerts').insert({
+      id: alertId,
+      type: 'system',
+      severity: 3,
+      message: newAlert.message,
+      location: newAlert.location,
+      timestamp: newAlert.timestamp,
+      acknowledged: false,
+    });
+    if (error) console.error('initiateRollCall failed:', error);
+  },
+
+  terminateRollCall: async (_building, floor) => {
+    const messagePrefix = `Safety check roll call initiated for Floor ${floor}`;
+    set((state) => ({
+      alerts: state.alerts.map((a) =>
+        a.message.startsWith(messagePrefix) ? { ...a, acknowledged: true } : a
+      ),
+    }));
+    const { error } = await supabase
+      .from('alerts')
+      .update({ acknowledged: true })
+      .like('message', `${messagePrefix}%`)
+      .eq('acknowledged', false);
+    if (error) console.error('terminateRollCall failed:', error);
+  },
+
+  submitGuestCheckIn: async (guestId, status, name, room) => {
+    set((state) => ({
+      guests: state.guests.map((g) =>
+        g.id === guestId ? { ...g, status } : g
+      ),
+    }));
+    const { error: gErr } = await supabase
+      .from('guests')
+      .update({ status })
+      .eq('id', guestId);
+    if (gErr) {
+      console.error('submitGuestCheckIn guest update failed:', gErr);
+      return;
+    }
+
+    const currentFloor = get().currentFloor;
+    const activeIncident = get().incidents.find(
+      (i) => i.location.floor === currentFloor && i.status !== 'resolved'
+    );
+
+    const now = new Date();
+    const timestamp = now.toTimeString().slice(0, 8);
+
+    if (activeIncident) {
+      const message =
+        status === 'evacuated'
+          ? `Safety Check: Guest ${name} (Room ${room}) checked in as SAFE.`
+          : `WARNING: Guest ${name} (Room ${room}) checked in as TRAPPED / NEEDS ASSISTANCE!`;
+
+      const timelineEvent = {
+        id: crypto.randomUUID(),
+        timestamp,
+        message,
+        type: (status === 'evacuated' ? 'update' : 'escalation') as 'update' | 'escalation',
+        author: 'Guest Safety Portal',
+      };
+
+      set((state) => ({
+        incidents: state.incidents.map((inc) =>
+          inc.id === activeIncident.id
+            ? { ...inc, timeline: [timelineEvent, ...inc.timeline] }
+            : inc
+        ),
+      }));
+
+      await supabase.from('timeline_events').insert({
+        id: timelineEvent.id,
+        incident_id: activeIncident.id,
+        timestamp: timelineEvent.timestamp,
+        message: timelineEvent.message,
+        type: timelineEvent.type,
+        author: timelineEvent.author,
+      });
+    }
+
+    if (status === 'missing') {
+      const channel = `${activeIncident?.location.building || 'Tower A'}::${room}`;
+      try {
+        await api.sendMessage({
+          channel,
+          sender: 'guest',
+          senderName: `Room ${room} (${name})`,
+          body: `🚨 EMERGENCY: Safety broadcast check-in reported - I NEED HELP / I AM TRAPPED IN ROOM ${room}!`,
+        });
+      } catch (e) {
+        console.error('Failed to post safety alert chat message:', e);
+      }
+    }
   },
 
   acknowledgeAlert: (id) => {

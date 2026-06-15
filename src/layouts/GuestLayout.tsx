@@ -1,5 +1,6 @@
 import React from 'react';
 import { Outlet, Link } from 'react-router-dom';
+import SafetyRollCallModal from '../components/SafetyRollCallModal';
 
 export default function GuestLayout() {
   return (
@@ -25,6 +26,9 @@ export default function GuestLayout() {
       <footer className="text-center py-4 text-xs text-blue-400/50">
         SentinelStay Emergency Response System • Your safety is our priority
       </footer>
+
+      {/* Safety check roll call modal */}
+      <SafetyRollCallModal />
     </div>
   );
 }
