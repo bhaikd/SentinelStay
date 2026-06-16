@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { api, type ChatMessageRow } from '../../services/api';
+import { useAppStore } from '../../store/appStore';
+import { supabase } from '../../lib/supabase';
 
 // Pinned demo guest context — matches SOSPortal.tsx. In a multi-room build this
 // would come from the guest's session / room key.
@@ -20,7 +22,13 @@ export default function GuestChat() {
   const [error, setError] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
   const [uploading, setUploading] = useState<null | 'image' | 'audio' | 'location'>(null);
+  const [aiTyping, setAiTyping] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const { incidents } = useAppStore();
+  const activeIncident = incidents.find(
+    (i) => i.location.floor === FLOOR && i.status !== 'resolved'
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -80,9 +88,92 @@ export default function GuestChat() {
     const body = input.trim();
     if (!body || sending) return;
     setSending(true);
+    
+    // Send guest message
     await send({ channel, sender: 'guest', senderName: `Room ${ROOM}`, body });
     setInput('');
     setSending(false);
+
+    // Call AI Chatbot for Triage response
+    if (activeIncident) {
+      setAiTyping(true);
+      try {
+        const updatedMessages = [
+          ...messages,
+          {
+            id: 'temp',
+            channel,
+            sender: 'guest' as const,
+            sender_name: `Room ${ROOM}`,
+            body,
+            attachment_url: null,
+            attachment_type: null,
+            lat: null,
+            lng: null,
+            created_at: new Date().toISOString(),
+          }
+        ];
+
+        const response = await fetch('/api/triage-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: updatedMessages.map((m) => ({ sender: m.sender, body: m.body })),
+            incident: {
+              id: activeIncident.id,
+              title: activeIncident.title,
+              description: activeIncident.description,
+              severity: activeIncident.severity,
+            },
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const reply = data.reply;
+          const extractedData = data.extractedData;
+
+          // Save AI's response message
+          await api.sendMessage({
+            channel,
+            sender: 'ai',
+            senderName: 'Sentinel AI',
+            body: reply,
+          });
+
+          // Check if AI extracted severity/critical info
+          if (extractedData) {
+            const { severity: aiSeverity, criticalInfo, tags } = extractedData;
+
+            if (aiSeverity > activeIncident.severity) {
+              await supabase
+                .from('incidents')
+                .update({ severity: Math.min(4, aiSeverity) })
+                .eq('id', activeIncident.id);
+            }
+
+            if (criticalInfo && criticalInfo.trim()) {
+              const now = new Date();
+              const timeStr = now.toTimeString().slice(0, 8);
+              const eventId = crypto.randomUUID();
+
+              await supabase.from('timeline_events').insert({
+                id: eventId,
+                incident_id: activeIncident.id,
+                timestamp: timeStr,
+                message: `AI Triage: ${criticalInfo} [Tags: ${tags.join(', ')}]`,
+                type: 'update',
+                author: 'Sentinel AI',
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('AI Triage error:', err);
+      } finally {
+        setAiTyping(false);
+      }
+    }
   };
 
   const handleLocation = () => {
@@ -236,8 +327,10 @@ export default function GuestChat() {
                   <div className="flex items-center gap-1.5 mb-1 text-[10px] text-blue-300/40">
                     {!isGuest && (
                       <>
-                        <span className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center">
-                          <span className="material-symbols-outlined text-[8px] text-white">person</span>
+                        <span className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center animate-pulse">
+                          <span className="material-symbols-outlined text-[8px] text-white">
+                            {msg.sender === 'ai' ? 'smart_toy' : 'person'}
+                          </span>
                         </span>
                         <span className="font-semibold text-blue-300/60">{msg.sender_name || 'Staff'}</span>
                         <span>•</span>
@@ -249,6 +342,8 @@ export default function GuestChat() {
                     className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                       isGuest
                         ? 'bg-blue-600 text-white rounded-br-md'
+                        : msg.sender === 'ai'
+                        ? 'bg-blue-950/40 border border-blue-500/30 text-white rounded-bl-md shadow-[0_0_12px_rgba(59,130,246,0.1)]'
                         : 'bg-white/10 text-white rounded-bl-md'
                     }`}
                   >
@@ -301,6 +396,27 @@ export default function GuestChat() {
             <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
             Uploading {uploading}…
           </div>
+        )}
+        {aiTyping && (
+          <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-start mt-2"
+          >
+            <div className="flex items-center gap-1.5 mb-1 text-[10px] text-blue-300/40 animate-pulse">
+              <span className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[8px] text-white">smart_toy</span>
+              </span>
+              <span className="font-semibold text-blue-300/60">Sentinel AI</span>
+              <span>•</span>
+              <span>Typing...</span>
+            </div>
+            <div className="bg-blue-950/40 border border-blue-500/30 text-white rounded-2xl rounded-bl-md px-4 py-2.5 text-sm flex gap-1 items-center shadow-[0_0_12px_rgba(59,130,246,0.1)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          </motion.div>
         )}
         <div ref={chatEndRef} />
       </div>
