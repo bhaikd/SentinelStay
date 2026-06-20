@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '../../store/appStore';
 import { formatElapsed, severityColor, severityLabel, typeIcon } from '../../utils/formatting';
 import { computeSafePath } from '../../utils/pathfinding';
+import type { Incident } from '../../types';
 
 
 
@@ -35,10 +36,11 @@ const facilities = [
 ];
 
 export default function CommandCenter() {
-  const { incidents, staff, guests, currentFloor, setCurrentFloor, elapsedSeconds, addTimelineEvent, addStaff, deployStaff, recallStaff, respondToIncident, escalateIncident, resolveIncident, alerts, initiateRollCall, terminateRollCall } = useAppStore();
+  const { incidents, staff, guests, currentFloor, setCurrentFloor, elapsedSeconds, addTimelineEvent, addStaff, deployStaff, recallStaff, respondToIncident, escalateIncident, resolveIncident, alerts, initiateRollCall, terminateRollCall, generatePlaybook, togglePlaybookTask, sendPABroadcast } = useAppStore();
 
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(incidents[0]?.id ?? null);
   const [logInput, setLogInput] = useState('');
+  const [paText, setPaText] = useState('');
   const [showGuestPanel, setShowGuestPanel] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [showAddStaff, setShowAddStaff] = useState(false);
@@ -48,6 +50,9 @@ export default function CommandCenter() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summaryText, setSummaryText] = useState('');
   const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  // AI Playbook Generation State
+  const [isGeneratingPlaybook, setIsGeneratingPlaybook] = useState(false);
 
   const [hoveredRoomId, setHoveredRoomId] = useState<string | null>(null);
 
@@ -62,7 +67,29 @@ export default function CommandCenter() {
     }
   }, [incidents, selectedIncidentId]);
 
-  const activeIncident = selectedIncidentId ? incidents.find((i) => i.id === selectedIncidentId) ?? incidents[0] : incidents[0];
+  const mockIncident: Incident = {
+    id: 'SYSTEM-MONITOR',
+    title: 'System Active Monitoring',
+    type: 'other',
+    severity: 1,
+    status: 'active',
+    location: {
+      building: 'Tower A',
+      floor: 14,
+      room: '1402',
+      coordinates: { x: 160, y: 60 }
+    },
+    reportedAt: new Date().toISOString(),
+    reportedBy: 'System Monitor',
+    description: 'All systems nominal. Monitoring safety channels.',
+    assignedUnits: [],
+    timeline: [],
+    casualties: 0,
+    evacuated: 0,
+    guestsAffected: 0,
+  };
+
+  const activeIncident = (selectedIncidentId ? incidents.find((i) => i.id === selectedIncidentId) ?? incidents[0] : incidents[0]) || mockIncident;
   const deployedStaff = activeIncident ? staff.filter((s) => s.currentIncident === activeIncident.id) : [];
   const availableStaff = staff.filter((s) => s.status === 'available' && !s.currentIncident);
   const affectedGuests = guests.filter((g) => g.floor === currentFloor);
@@ -291,17 +318,8 @@ export default function CommandCenter() {
     );
   };
 
-  if (!activeIncident) {
-    return (
-      <div className="h-full flex items-center justify-center bg-surface-container-lowest text-on-surface">
-        <div className="text-center">
-          <span className="material-symbols-outlined text-6xl text-emerald-500 mb-4" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-          <h2 className="text-2xl font-bold">No Active Incidents</h2>
-          <p className="text-on-surface-variant mt-2">The command center is currently monitoring for alerts.</p>
-        </div>
-      </div>
-    );
-  }
+  // Render the Command Center dashboard with fallback mock incident support
+
 
   return (
     <div className="h-full flex overflow-hidden relative">
@@ -692,6 +710,73 @@ export default function CommandCenter() {
             )}
           </div>
 
+          {/* PA Voice Broadcast Console */}
+          <div className="bg-surface-container-low border border-outline-variant/15 rounded-xl p-3.5 mb-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-bold text-on-surface uppercase tracking-wider flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-sm text-blue-500">volume_up</span>
+                PA Broadcast Console
+              </h4>
+              <span className="text-[10px] text-on-surface-variant font-medium">Tower A, F{currentFloor}</span>
+            </div>
+            
+            <p className="text-[10.5px] text-on-surface-variant leading-relaxed mb-3">
+              Broadcast vocal messages directly to guest screens and speak them out loud.
+            </p>
+
+            <div className="space-y-3">
+              <textarea
+                value={paText}
+                onChange={(e) => setPaText(e.target.value)}
+                placeholder="Enter custom announcement text..."
+                rows={3}
+                className="w-full text-xs p-2.5 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-blue-500/50 resize-none"
+              />
+
+              {/* Quick templates */}
+              <div className="space-y-1.5">
+                <span className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider block">Templates</span>
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={() => setPaText(`Attention: Floor ${currentFloor} is evacuating. Evacuate immediately via the nearest safe stairs. Do not use elevators.`)}
+                    className="text-[10px] text-left p-1.5 rounded bg-surface-container-highest/50 hover:bg-surface-container-highest border border-outline-variant/10 text-on-surface-variant truncate hover:text-on-surface transition-colors"
+                    title={`Attention: Floor ${currentFloor} is evacuating. Evacuate immediately via the nearest safe stairs. Do not use elevators.`}
+                  >
+                    🚨 Floor {currentFloor} Evacuation
+                  </button>
+                  <button
+                    onClick={() => setPaText("An emergency has been reported. Please remain inside your rooms and await instructions.")}
+                    className="text-[10px] text-left p-1.5 rounded bg-surface-container-highest/50 hover:bg-surface-container-highest border border-outline-variant/10 text-on-surface-variant truncate hover:text-on-surface transition-colors"
+                    title="An emergency has been reported. Please remain inside your rooms and await instructions."
+                  >
+                    🔒 Shelter-in-Place
+                  </button>
+                  <button
+                    onClick={() => setPaText("All clear. The emergency has been resolved. You may return to normal activities.")}
+                    className="text-[10px] text-left p-1.5 rounded bg-surface-container-highest/50 hover:bg-surface-container-highest border border-outline-variant/10 text-on-surface-variant truncate hover:text-on-surface transition-colors"
+                    title="All clear. The emergency has been resolved. You may return to normal activities."
+                  >
+                    ✅ All Clear
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={async () => {
+                  if (!paText.trim()) return;
+                  await sendPABroadcast('Tower A', currentFloor, paText.trim());
+                  showToast('PA Broadcast voice alert sent.');
+                  setPaText('');
+                }}
+                disabled={!paText.trim()}
+                className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/55 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>volume_up</span>
+                Broadcast PA Voice Alert
+              </button>
+            </div>
+          </div>
+
           {missingGuests.length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
               <div className="flex items-center gap-2 text-amber-700 text-xs font-bold mb-1">
@@ -871,6 +956,125 @@ export default function CommandCenter() {
             </div>
           )}
         </div>
+
+        {/* Playbook Checklist */}
+        {activeIncident && (
+          <div className="p-6 border-b border-outline-variant/10 bg-surface-container-lowest/50">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-primary">fact_check</span>
+                Operations Playbook
+              </h3>
+              {(activeIncident.playbook || []).length > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-primary/10 text-primary">
+                  {(activeIncident.playbook || []).filter((t) => t.status === 'completed').length}/{(activeIncident.playbook || []).length} DONE
+                </span>
+              )}
+            </div>
+
+            {isGeneratingPlaybook ? (
+              <div className="py-6 flex flex-col items-center justify-center text-center space-y-3 bg-surface-container-low/50 rounded-xl border border-primary/20">
+                <span className="material-symbols-outlined text-3xl animate-spin text-primary animate-pulse">auto_awesome</span>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-on-surface animate-pulse">Sentinel AI is drafting SOP...</p>
+                  <p className="text-[10px] text-on-surface-variant">Analyzing incident severity and threat level</p>
+                </div>
+              </div>
+            ) : !(activeIncident.playbook) || (activeIncident.playbook || []).length === 0 ? (
+              <div className="p-4 text-center rounded-xl bg-surface-container-low/40 border border-outline-variant/10 flex flex-col items-center">
+                <span className="material-symbols-outlined text-3xl text-on-surface-variant/40 mb-2">assignment</span>
+                <p className="text-xs font-semibold text-on-surface-variant mb-1">No protocol playbook drafted</p>
+                <p className="text-[10.5px] text-on-surface-variant/70 mb-3 leading-relaxed">
+                  Generate an emergency response SOP checklist tailored to this incident's severity and type.
+                </p>
+                <button
+                  onClick={async () => {
+                    setIsGeneratingPlaybook(true);
+                    try {
+                      await generatePlaybook(activeIncident.id);
+                      showToast('AI SOP Playbook generated.');
+                    } catch (e) {
+                      console.error(e);
+                    } finally {
+                      setIsGeneratingPlaybook(false);
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold bg-primary text-on-primary hover:bg-primary/95 transition-all shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-sm">auto_awesome</span>
+                  Draft AI SOP Playbook
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Playbook Progress Bar */}
+                <div>
+                  {(() => {
+                    const pb = activeIncident.playbook || [];
+                    const completedTasks = pb.filter((t) => t.status === 'completed');
+                    const progress = pb.length > 0 ? Math.round((completedTasks.length / pb.length) * 100) : 0;
+                    return (
+                      <>
+                        <div className="flex justify-between text-[10px] font-bold text-on-surface-variant mb-1">
+                          <span>SOP STATUS CHECKLIST</span>
+                          <span>{progress}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-surface-container-high rounded-full overflow-hidden">
+                          <div
+                            className="bg-primary h-full transition-all duration-500 ease-out"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* Tasks List */}
+                <div className="space-y-2 pt-1">
+                  {(activeIncident.playbook || []).map((task) => {
+                    const isCompleted = task.status === 'completed';
+                    return (
+                      <div
+                        key={task.id}
+                        onClick={() => togglePlaybookTask(activeIncident.id, task.id, !isCompleted)}
+                        className={`flex items-start gap-3 p-3 rounded-lg border transition-all cursor-pointer ${
+                          isCompleted
+                            ? 'bg-emerald-500/5 border-emerald-500/10 text-on-surface-variant'
+                            : 'bg-surface-container-low border-outline-variant/10 hover:border-primary/20 text-on-surface'
+                        }`}
+                      >
+                        <button
+                          className={`mt-0.5 w-4 h-4 rounded flex items-center justify-center border transition-all shrink-0 ${
+                            isCompleted
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : 'border-outline text-transparent hover:border-primary'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[10px] font-bold">check</span>
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={`text-xs font-medium leading-normal transition-all ${
+                              isCompleted ? 'line-through text-on-surface-variant/60' : ''
+                            }`}
+                          >
+                            {task.text}
+                          </p>
+                          {isCompleted && task.completedAt && (
+                            <p className="text-[9px] text-emerald-600/70 mt-1">
+                              Done {new Date(task.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} by Command
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Timeline */}
         <div className="p-6 flex-1">

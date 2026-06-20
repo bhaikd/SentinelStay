@@ -34,3 +34,8 @@ Thumbs.db
 # Build artifacts
 coverage/
 *.tsbuildinfo
+
+# Presentation files
+*.pdf
+*.pptx
+

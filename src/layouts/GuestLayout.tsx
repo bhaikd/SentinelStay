@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import SafetyRollCallModal from '../components/SafetyRollCallModal';
+import PABroadcastListener from '../components/PABroadcastListener';
 
 export default function GuestLayout() {
   return (
@@ -29,6 +30,9 @@ export default function GuestLayout() {
 
       {/* Safety check roll call modal */}
       <SafetyRollCallModal />
+
+      {/* Real-time PA Voice Broadcast Listener */}
+      <PABroadcastListener />
     </div>
   );
 }

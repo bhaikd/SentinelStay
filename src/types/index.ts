@@ -1,3 +1,11 @@
+export interface PlaybookTask {
+  id: string;
+  text: string;
+  status: 'pending' | 'completed';
+  completedAt?: string;
+  completedBy?: string;
+}
+
 export interface Incident {
   id: string;
   title: string;
@@ -18,6 +26,7 @@ export interface Incident {
   casualties: number;
   evacuated: number;
   guestsAffected: number;
+  playbook?: PlaybookTask[];
 }
 
 export interface TimelineEvent {

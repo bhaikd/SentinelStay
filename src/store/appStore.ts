@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { differenceInSeconds } from 'date-fns';
-import type { Incident, StaffMember, Guest, AlertNotification } from '../types';
+import type { Incident, StaffMember, Guest, AlertNotification, PlaybookTask } from '../types';
 import { api, mapIncident, mapStaff, mapGuest, mapAlert, mapTimelineEvent } from '../services/api';
 import { supabase } from '../lib/supabase';
 
@@ -16,6 +16,8 @@ interface AppState {
   respondToIncident: (incidentId: string) => void;
   escalateIncident: (incidentId: string) => void;
   resolveIncident: (incidentId: string) => void;
+  generatePlaybook: (incidentId: string) => Promise<void>;
+  togglePlaybookTask: (incidentId: string, taskId: string, completed: boolean) => Promise<void>;
 
   // Staff
   staff: StaffMember[];
@@ -35,6 +37,8 @@ interface AppState {
   alerts: AlertNotification[];
   acknowledgeAlert: (id: string) => void;
   unacknowledgedCount: () => number;
+  sendPABroadcast: (building: string, floor: number, text: string) => Promise<void>;
+
 
   // UI State
   sidebarOpen: boolean;
@@ -227,6 +231,107 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
       alert(`Could not resolve: ${(e as Error).message}`);
     });
+  },
+
+  generatePlaybook: async (incidentId) => {
+    const inc = get().incidents.find((i) => i.id === incidentId);
+    if (!inc) return;
+
+    try {
+      const response = await fetch('/api/generate-playbook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: inc.title,
+          type: inc.type,
+          description: inc.description,
+          severity: inc.severity,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to generate playbook: Status ${response.status}`);
+      }
+
+      const data = await response.json();
+      const rawTasks: string[] = data.playbook || [];
+      const tasks: PlaybookTask[] = rawTasks.map((t) => ({
+        id: crypto.randomUUID(),
+        text: t,
+        status: 'pending',
+      }));
+
+      // Optimistic Update
+      set((state) => ({
+        incidents: state.incidents.map((i) =>
+          i.id === incidentId ? { ...i, playbook: tasks } : i
+        ),
+      }));
+
+      const now = new Date();
+      const timestamp = now.toTimeString().slice(0, 8);
+      const timelineEvent = {
+        timestamp,
+        message: 'AI Triage: Generated checklist of emergency SOP protocols.',
+        type: 'update' as const,
+        author: 'Sentinel AI',
+      };
+
+      await api.updatePlaybook(incidentId, tasks, timelineEvent);
+    } catch (e) {
+      console.error('generatePlaybook failed:', e);
+      alert(`Could not generate playbook: ${(e as Error).message}`);
+    }
+  },
+
+  togglePlaybookTask: async (incidentId, taskId, completed) => {
+    const inc = get().incidents.find((i) => i.id === incidentId);
+    if (!inc || !inc.playbook) return;
+
+    const prevPlaybook = inc.playbook;
+    const nextPlaybook: PlaybookTask[] = inc.playbook.map((t) =>
+      t.id === taskId
+        ? {
+            ...t,
+            status: completed ? 'completed' : 'pending',
+            completedAt: completed ? new Date().toISOString() : undefined,
+            completedBy: completed ? 'Command Center' : undefined,
+          }
+        : t
+    );
+
+    // Optimistic update
+    set((state) => ({
+      incidents: state.incidents.map((i) =>
+        i.id === incidentId ? { ...i, playbook: nextPlaybook } : i
+      ),
+    }));
+
+    try {
+      const task = prevPlaybook.find((t) => t.id === taskId);
+      const taskText = task ? task.text : 'SOP action';
+      const now = new Date();
+      const timestamp = now.toTimeString().slice(0, 8);
+      const timelineEvent = {
+        timestamp,
+        message: completed
+          ? `SOP Action Completed: ${taskText} (completed by Command Center).`
+          : `SOP Action Reverted: ${taskText}.`,
+        type: 'update' as const,
+        author: 'Command Center',
+      };
+
+      await api.updatePlaybook(incidentId, nextPlaybook, timelineEvent);
+    } catch (e) {
+      console.error('togglePlaybookTask failed:', e);
+      // Revert on error
+      set((state) => ({
+        incidents: state.incidents.map((i) =>
+          i.id === incidentId ? { ...i, playbook: prevPlaybook } : i
+        ),
+      }));
+      alert(`Could not update playbook task: ${(e as Error).message}`);
+    }
   },
 
   updateStaffStatus: (staffId, status) => {
@@ -422,6 +527,41 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   unacknowledgedCount: () => get().alerts.filter((a) => !a.acknowledged).length,
+  sendPABroadcast: async (building, floor, text) => {
+    const now = new Date();
+    const timeStr = now.toTimeString().slice(0, 8);
+    const alertId = crypto.randomUUID();
+    const message = `PA_BROADCAST: ${text}`;
+    const location = `${building}, Floor ${floor}`;
+    
+    const newAlert = {
+      id: alertId,
+      type: 'system' as const,
+      severity: 4 as 1 | 2 | 3 | 4,
+      message,
+      location,
+      timestamp: timeStr,
+      acknowledged: false,
+    };
+    
+    set((state) => ({
+      alerts: [
+        { ...newAlert, created_at: now.toISOString() } as AlertNotification,
+        ...state.alerts,
+      ],
+    }));
+
+    const { error } = await supabase.from('alerts').insert({
+      id: alertId,
+      type: 'system',
+      severity: 4,
+      message,
+      location,
+      timestamp: timeStr,
+      acknowledged: false,
+    });
+    if (error) console.error('sendPABroadcast failed:', error);
+  },
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   setCurrentFloor: (floor) => set({ currentFloor: floor }),
   startDrill: () => {

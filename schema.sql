@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS public.incidents (
   casualties         INTEGER NOT NULL DEFAULT 0,
   evacuated          INTEGER NOT NULL DEFAULT 0,
   guests_affected    INTEGER NOT NULL DEFAULT 0,
+  playbook           JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

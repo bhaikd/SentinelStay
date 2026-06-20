@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Incident, StaffMember, Guest, AlertNotification, TimelineEvent } from '../types';
+import type { Incident, StaffMember, Guest, AlertNotification, TimelineEvent, PlaybookTask } from '../types';
 
 export const mapTimelineEvent = (te: any): TimelineEvent => ({
   id: te.id,
@@ -29,6 +29,7 @@ export const mapIncident = (row: any, timelineEvents: any[] = []): Incident => (
   evacuated: row.evacuated,
   guestsAffected: row.guests_affected,
   timeline: timelineEvents.map(mapTimelineEvent).reverse(),
+  playbook: row.playbook || [],
 });
 
 export const mapStaff = (row: any): StaffMember => ({
@@ -491,6 +492,23 @@ export const api = {
     return () => {
       supabase.removeChannel(sub);
     };
+  },
+
+  async updatePlaybook(id: string, playbook: PlaybookTask[], timelineEvent?: Omit<TimelineEvent, 'id'>) {
+    const { error: updErr } = await supabase.from('incidents').update({ playbook }).eq('id', id);
+    if (updErr) throw new Error(updErr.message);
+
+    if (timelineEvent) {
+      const { error: tlErr } = await supabase.from('timeline_events').insert({
+        id: crypto.randomUUID(),
+        incident_id: id,
+        timestamp: timelineEvent.timestamp,
+        message: timelineEvent.message,
+        type: timelineEvent.type,
+        author: timelineEvent.author,
+      });
+      if (tlErr) throw new Error(tlErr.message);
+    }
   },
 
   async uploadAttachment(file: Blob, opts: { channel: string; kind: 'image' | 'audio'; ext: string }) {
