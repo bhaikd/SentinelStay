@@ -46,6 +46,11 @@ export default function CommandCenter() {
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [showDeployPicker, setShowDeployPicker] = useState(false);
 
+  // AI Dispatch Recommendations State
+  const [recommendations, setRecommendations] = useState<Array<{ staffId: string; score: number; explanation: string }>>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [reasoningText, setReasoningText] = useState('');
+
   // AI Summarization State
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summaryText, setSummaryText] = useState('');
@@ -151,6 +156,46 @@ export default function CommandCenter() {
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const fetchRecommendations = async () => {
+    if (!activeIncident) return;
+    setLoadingRecommendations(true);
+    setRecommendations([]);
+    setReasoningText('');
+    try {
+      const response = await fetch('/api/optimize-dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          incident: {
+            id: activeIncident.id,
+            title: activeIncident.title,
+            type: activeIncident.type,
+            severity: activeIncident.severity,
+            location: activeIncident.location,
+            description: activeIncident.description
+          },
+          staff: availableStaff
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRecommendations(data.recommendations || []);
+        setReasoningText(data.reasoning || '');
+      } else {
+        console.error('Failed to fetch recommendations:', response.status);
+      }
+    } catch (e) {
+      console.error('Error fetching recommendations:', e);
+    } finally {
+      setLoadingRecommendations(false);
+    }
+  };
+
+  const handleOpenDeployPicker = () => {
+    setShowDeployPicker(true);
+    fetchRecommendations();
   };
 
   const handleAddLog = () => {
@@ -891,7 +936,7 @@ export default function CommandCenter() {
             </h3>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowDeployPicker(true)}
+                onClick={handleOpenDeployPicker}
                 disabled={!activeIncident || availableStaff.length === 0}
                 className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md bg-primary text-on-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 title={availableStaff.length === 0 ? 'No available units' : 'Deploy a unit'}
@@ -1138,7 +1183,7 @@ export default function CommandCenter() {
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-surface-container-lowest text-on-surface rounded-2xl shadow-2xl w-full max-w-md p-6 border border-outline-variant/20"
+              className="bg-surface-container-lowest text-on-surface rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-outline-variant/20"
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold">Deploy Unit to {activeIncident.id}</h3>
@@ -1147,10 +1192,113 @@ export default function CommandCenter() {
                 </button>
               </div>
               <p className="text-xs text-on-surface-variant mb-4">{activeIncident.title} • {activeIncident.location.building}, Floor {activeIncident.location.floor}</p>
+              
+              {/* AI Smart Dispatch Recommendations */}
+              <div className="mb-6 p-4 rounded-xl border border-blue-500/20 bg-surface-container-low/50 relative overflow-hidden shadow-[0_0_15px_rgba(59,130,246,0.05)]">
+                {/* Glowing status line */}
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-500" />
+
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold text-on-surface uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px] text-blue-400">auto_awesome</span>
+                    AI Smart Dispatch Recommendations
+                  </h4>
+                  <span className="text-[9px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded-full font-bold">GEMINI OPTIMIZED</span>
+                </div>
+
+                {loadingRecommendations ? (
+                  <div className="py-4 flex flex-col items-center justify-center gap-2 text-xs text-on-surface-variant">
+                    <span className="material-symbols-outlined animate-spin text-blue-400">autorenew</span>
+                    <span>Analyzing incident context & staff proximity...</span>
+                  </div>
+                ) : recommendations.length === 0 ? (
+                  <p className="text-xs text-on-surface-variant italic">No AI recommendations available.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {recommendations.map((rec) => {
+                        const staffMember = staff.find((s) => s.id === rec.staffId);
+                        if (!staffMember) return null;
+
+                        return (
+                          <div key={rec.staffId} className="flex items-start gap-3 p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant/10 hover:border-blue-500/30 transition-colors">
+                            {/* Score badge */}
+                            <div className="shrink-0 flex flex-col items-center justify-center w-11 h-11 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 font-bold">
+                              <span className="text-xs font-black">{rec.score}%</span>
+                              <span className="text-[7px] uppercase tracking-wider font-semibold opacity-60">Match</span>
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-bold text-on-surface truncate">
+                                  {staffMember.unit} — {staffMember.name}
+                                </p>
+                                <span className="text-[9px] bg-slate-500/15 text-on-surface-variant px-1.5 py-0.2 rounded font-semibold capitalize">
+                                  {staffMember.role}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-on-surface-variant/80 mt-1 leading-relaxed">
+                                {rec.explanation}
+                              </p>
+                            </div>
+                            
+                            {/* Individual Deploy Button */}
+                            <button
+                              onClick={async () => {
+                                await deployStaff(staffMember.id, activeIncident.id, { eta: 'ETA 2m' });
+                                showToast(`${staffMember.unit} dispatched.`);
+                                setShowDeployPicker(false);
+                              }}
+                              className="shrink-0 w-7 h-7 rounded bg-blue-600 hover:bg-blue-750 text-white flex items-center justify-center shadow-sm transition-colors cursor-pointer"
+                              title="Deploy this unit"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">send</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {reasoningText && (
+                      <p className="text-[10px] text-on-surface-variant italic bg-surface-container-lowest p-2 rounded border border-outline-variant/5">
+                        {reasoningText}
+                      </p>
+                    )}
+
+                    {/* Bulk deploy button */}
+                    <button
+                      onClick={async () => {
+                        const idsToDeploy = recommendations.map(r => r.staffId);
+                        let deployedCount = 0;
+                        for (const sId of idsToDeploy) {
+                          const s = staff.find(x => x.id === sId);
+                          if (s && s.status === 'available') {
+                            await deployStaff(sId, activeIncident.id, { eta: 'ETA 2m' });
+                            deployedCount++;
+                          }
+                        }
+                        if (deployedCount > 0) {
+                          showToast(`Dispatched recommended units to ${activeIncident.id}.`);
+                        } else {
+                          showToast(`All recommended units are already busy.`);
+                        }
+                        setShowDeployPicker(false);
+                      }}
+                      className="w-full py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">emergency_share</span>
+                      Deploy All Recommended Units
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Standard List */}
+              <h4 className="text-xs font-bold text-on-surface uppercase tracking-wider mb-2">Available Units</h4>
               {availableStaff.length === 0 ? (
                 <p className="text-sm text-on-surface-variant italic">All units are currently engaged.</p>
               ) : (
-                <div className="space-y-2 max-h-80 overflow-y-auto">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {availableStaff.map((s) => (
                     <button
                       key={s.id}
