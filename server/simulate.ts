@@ -55,10 +55,12 @@ const mockIncidents = [
   }
 ];
 
+const now = new Date();
+
 const mockTimeline = [
-  { id: 'tl-1', incident_id: 'INC-042', timestamp: '14:32:00', message: 'Initial alarm triggered by smoke detector 14-A.', type: 'alert', author: 'System' },
-  { id: 'tl-2', incident_id: 'INC-042', timestamp: '14:32:15', message: 'Secondary alarm triggered by heat sensor 1402.', type: 'escalation', author: 'System' },
-  { id: 'tl-3', incident_id: 'INC-042', timestamp: '14:33:00', message: 'Automated 911 dispatch initiated.', type: 'dispatch', author: 'System' },
+  { id: 'tl-1', incident_id: 'INC-042', timestamp: new Date(now.getTime() - 120000).toISOString(), message: 'Initial alarm triggered by smoke detector 14-A.', type: 'alert', author: 'System' },
+  { id: 'tl-2', incident_id: 'INC-042', timestamp: new Date(now.getTime() - 105000).toISOString(), message: 'Secondary alarm triggered by heat sensor 1402.', type: 'escalation', author: 'System' },
+  { id: 'tl-3', incident_id: 'INC-042', timestamp: new Date(now.getTime() - 60000).toISOString(), message: 'Automated 911 dispatch initiated.', type: 'dispatch', author: 'System' },
 ];
 
 const mockStaff = [
@@ -72,8 +74,8 @@ const mockGuests = [
 ];
 
 const mockAlerts = [
-  { id: 'ALT-101', type: 'system', severity: 4, message: 'CRITICAL: Fire suppression system pressure drop on Floor 14.', location: 'Main Tower, Floor 14', timestamp: '14:34:10', incident_id: 'INC-042' },
-  { id: 'ALT-102', type: 'sos', severity: 4, message: 'GUEST SOS: Possible entrapment reported.', location: 'Room 1402', timestamp: '14:35:00', incident_id: 'INC-042' },
+  { id: 'ALT-101', type: 'system', severity: 4, message: 'CRITICAL: Fire suppression system pressure drop on Floor 14.', location: 'Main Tower, Floor 14', timestamp: new Date(now.getTime() - 50000).toISOString(), incident_id: 'INC-042' },
+  { id: 'ALT-102', type: 'sos', severity: 4, message: 'GUEST SOS: Possible entrapment reported.', location: 'Room 1402', timestamp: new Date(now.getTime() - 40000).toISOString(), incident_id: 'INC-042' },
 ];
 
 // Seed the database
@@ -100,7 +102,7 @@ async function runSimulation() {
     await supabase.from('timeline_events').insert({
       id: crypto.randomUUID(),
       incident_id: 'INC-042',
-      timestamp: new Date().toTimeString().slice(0, 8),
+      timestamp: new Date().toISOString(),
       message: `System status check complete. Auto log ${tick}.`,
       type: 'update',
       author: 'Backend Simulator'
@@ -113,7 +115,7 @@ async function runSimulation() {
         severity: 2,
         message: `High temp warning on floor 15 (Radiant heat from 14). Tick ${tick}`,
         location: 'Main Tower, Floor 15',
-        timestamp: new Date().toTimeString().slice(0, 8),
+        timestamp: new Date().toISOString(),
         incident_id: 'INC-042'
       });
     }

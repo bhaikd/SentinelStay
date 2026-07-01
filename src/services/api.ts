@@ -1,9 +1,23 @@
 import { supabase } from '../lib/supabase';
 import type { Incident, StaffMember, Guest, AlertNotification, TimelineEvent, PlaybookTask } from '../types';
 
+const formatTimestamp = (ts: string): string => {
+  if (ts && (ts.includes('T') || ts.includes('-'))) {
+    try {
+      const date = new Date(ts);
+      if (!isNaN(date.getTime())) {
+        return date.toTimeString().slice(0, 8);
+      }
+    } catch {
+      // fallback
+    }
+  }
+  return ts;
+};
+
 export const mapTimelineEvent = (te: any): TimelineEvent => ({
   id: te.id,
-  timestamp: te.timestamp,
+  timestamp: formatTimestamp(te.timestamp),
   message: te.message,
   type: te.type,
   author: te.author,
@@ -72,7 +86,7 @@ export const mapAlert = (row: any): AlertNotification => ({
   severity: row.severity,
   message: row.message,
   location: row.location,
-  timestamp: row.timestamp,
+  timestamp: formatTimestamp(row.timestamp),
   acknowledged: row.acknowledged,
   incidentId: row.incident_id,
 });
@@ -116,7 +130,7 @@ export const api = {
     const { error: tlErr } = await supabase.from('timeline_events').insert({
       id: crypto.randomUUID(),
       incident_id: id,
-      timestamp: now.toTimeString().slice(0, 8),
+      timestamp: now.toISOString(),
       message,
       type: tlType,
       author: 'Command Center',
@@ -132,7 +146,7 @@ export const api = {
     const { error: tlErr } = await supabase.from('timeline_events').insert({
       id: crypto.randomUUID(),
       incident_id: id,
-      timestamp: now.toTimeString().slice(0, 8),
+      timestamp: now.toISOString(),
       message: `Incident escalated to severity ${nextSeverity}.`,
       type: 'escalation',
       author: 'Command Center',
@@ -163,9 +177,9 @@ export const api = {
   },
 
   async raiseStaffSOS(input: { staff: StaffMember; note?: string }) {
-    const { staff, note } = input;
+    const staff = input.staff;
+    const note = input.note;
     const now = new Date();
-    const timeStr = now.toTimeString().slice(0, 8);
     const message = `STAFF SOS: ${staff.name} (${staff.unit}) requesting backup${note ? ` — ${note}` : ''}`;
     const location = `${staff.location.building}, Floor ${staff.location.floor}`;
     const { data, error } = await supabase
@@ -176,7 +190,7 @@ export const api = {
         severity: 3,
         message,
         location,
-        timestamp: timeStr,
+        timestamp: now.toISOString(),
         acknowledged: false,
       })
       .select('*')
@@ -253,7 +267,7 @@ export const api = {
     await supabase.from('timeline_events').insert({
       id: crypto.randomUUID(),
       incident_id: incidentId,
-      timestamp: now.toTimeString().slice(0, 8),
+      timestamp: now.toISOString(),
       message: `${staffRow.unit} (${staffRow.name}) dispatched — ${eta}.`,
       type: 'dispatch',
       author: 'Command Center',
@@ -297,7 +311,7 @@ export const api = {
       await supabase.from('timeline_events').insert({
         id: crypto.randomUUID(),
         incident_id: prev.current_incident,
-        timestamp: now.toTimeString().slice(0, 8),
+        timestamp: now.toISOString(),
         message: `${prev.unit} (${prev.name}) recalled to standby.`,
         type: 'update',
         author: 'Command Center',
@@ -310,7 +324,6 @@ export const api = {
   async createDrillIncident() {
     const drillId = `DRILL-${Math.floor(Math.random() * 10000)}`;
     const now = new Date();
-    const timeStr = now.toTimeString().slice(0, 8);
 
     const drillIncident = {
       id: drillId,
@@ -337,7 +350,7 @@ export const api = {
     await supabase.from('timeline_events').insert({
       id: crypto.randomUUID(),
       incident_id: drillId,
-      timestamp: timeStr,
+      timestamp: now.toISOString(),
       message: 'Drill initiated. Please respond to the designated location.',
       type: 'alert',
       author: 'System'
@@ -349,7 +362,7 @@ export const api = {
       severity: 3,
       message: `DRILL: Fire alarm simulation initiated on Floor 14.`,
       location: 'Tower A, Floor 14',
-      timestamp: timeStr,
+      timestamp: now.toISOString(),
       incident_id: drillId,
       acknowledged: false
     });
@@ -371,7 +384,6 @@ export const api = {
     guestName?: string;
   }) {
     const now = new Date();
-    const timeStr = now.toTimeString().slice(0, 8);
     const severityMap = { medical: 3, fire: 4, security: 3, other: 2 } as const;
     const alertId = crypto.randomUUID();
 
@@ -383,7 +395,7 @@ export const api = {
         severity: severityMap[input.category],
         message: `SOS: ${input.category} emergency in Room ${input.room}${input.silent ? ' (silent mode)' : ''}`,
         location: `${input.building}, Floor ${input.floor}, Room ${input.room}`,
-        timestamp: timeStr,
+        timestamp: now.toISOString(),
         acknowledged: false,
       })
       .select('id, incident_id')
@@ -502,7 +514,7 @@ export const api = {
       const { error: tlErr } = await supabase.from('timeline_events').insert({
         id: crypto.randomUUID(),
         incident_id: id,
-        timestamp: timelineEvent.timestamp,
+        timestamp: new Date().toISOString(),
         message: timelineEvent.message,
         type: timelineEvent.type,
         author: timelineEvent.author,

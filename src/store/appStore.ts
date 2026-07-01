@@ -426,7 +426,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       severity: 3,
       message: newAlert.message,
       location: newAlert.location,
-      timestamp: newAlert.timestamp,
+      timestamp: now.toISOString(),
       acknowledged: false,
     });
     if (error) console.error('initiateRollCall failed:', error);
@@ -495,7 +495,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await supabase.from('timeline_events').insert({
         id: timelineEvent.id,
         incident_id: activeIncident.id,
-        timestamp: timelineEvent.timestamp,
+        timestamp: now.toISOString(),
         message: timelineEvent.message,
         type: timelineEvent.type,
         author: timelineEvent.author,
@@ -557,7 +557,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       severity: 4,
       message,
       location,
-      timestamp: timeStr,
+      timestamp: now.toISOString(),
       acknowledged: false,
     });
     if (error) console.error('sendPABroadcast failed:', error);

@@ -154,13 +154,12 @@ export default function GuestChat() {
 
             if (criticalInfo && criticalInfo.trim()) {
               const now = new Date();
-              const timeStr = now.toTimeString().slice(0, 8);
               const eventId = crypto.randomUUID();
 
               await supabase.from('timeline_events').insert({
                 id: eventId,
                 incident_id: activeIncident.id,
-                timestamp: timeStr,
+                timestamp: now.toISOString(),
                 message: `AI Triage: ${criticalInfo} [Tags: ${tags.join(', ')}]`,
                 type: 'update',
                 author: 'Sentinel AI',

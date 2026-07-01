@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS public.incidents (
 CREATE TABLE IF NOT EXISTS public.timeline_events (
   id           TEXT PRIMARY KEY,
   incident_id  TEXT NOT NULL REFERENCES public.incidents(id) ON DELETE CASCADE,
-  timestamp    TEXT NOT NULL,
+  timestamp    TIMESTAMPTZ NOT NULL,
   message      TEXT NOT NULL,
   type         timeline_event_type NOT NULL,
   author       TEXT NOT NULL,
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS public.alerts (
   severity      INTEGER NOT NULL CHECK (severity BETWEEN 1 AND 4),
   message       TEXT NOT NULL,
   location      TEXT NOT NULL,
-  timestamp     TEXT NOT NULL,
+  timestamp     TIMESTAMPTZ NOT NULL,
   acknowledged  BOOLEAN NOT NULL DEFAULT FALSE,
   incident_id   TEXT REFERENCES public.incidents(id) ON DELETE SET NULL,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -345,7 +345,7 @@ BEGIN
   VALUES (
     gen_random_uuid(),
     v_incident_id,
-    to_char(now(), 'HH24:MI:SS'),
+    now(),
     coalesce(NEW.message, 'Guest SOS received.'),
     'alert',
     'Guest Portal'
