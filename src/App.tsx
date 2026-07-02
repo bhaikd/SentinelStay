@@ -65,20 +65,44 @@ function App() {
 
         {/* Protected Staff & Command Routes */}
         <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-          <Route path="/staff" element={<StaffDashboard />} />
-          <Route path="/command" element={<CommandCenter />} />
-          <Route path="/command/incidents" element={<IncidentLog />} />
-          <Route path="/command/guests" element={<GuestRoster />} />
-          <Route path="/command/building" element={<BuildingData />} />
-          <Route path="/command/channels" element={<Channels />} />
+          <Route path="/staff" element={
+            <ProtectedRoute allowedRoles={['staff', 'admin']}>
+              <StaffDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/command" element={
+            <ProtectedRoute allowedRoles={['dispatcher', 'admin']}>
+              <CommandCenter />
+            </ProtectedRoute>
+          } />
+          <Route path="/command/incidents" element={
+            <ProtectedRoute allowedRoles={['dispatcher', 'admin']}>
+              <IncidentLog />
+            </ProtectedRoute>
+          } />
+          <Route path="/command/guests" element={
+            <ProtectedRoute allowedRoles={['dispatcher', 'admin']}>
+              <GuestRoster />
+            </ProtectedRoute>
+          } />
+          <Route path="/command/building" element={
+            <ProtectedRoute allowedRoles={['dispatcher', 'admin']}>
+              <BuildingData />
+            </ProtectedRoute>
+          } />
+          <Route path="/command/channels" element={
+            <ProtectedRoute allowedRoles={['dispatcher', 'admin']}>
+              <Channels />
+            </ProtectedRoute>
+          } />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
 
         {/* Protected Standalone Pages */}
-        <Route path="/responder" element={<ProtectedRoute><ResponderPortal /></ProtectedRoute>} />
-        <Route path="/corporate" element={<ProtectedRoute><CorporateDashboard /></ProtectedRoute>} />
-        <Route path="/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
+        <Route path="/responder" element={<ProtectedRoute allowedRoles={['responder', 'admin']}><ResponderPortal /></ProtectedRoute>} />
+        <Route path="/corporate" element={<ProtectedRoute allowedRoles={['dispatcher', 'admin']}><CorporateDashboard /></ProtectedRoute>} />
+        <Route path="/analytics" element={<ProtectedRoute allowedRoles={['dispatcher', 'admin']}><AnalyticsDashboard /></ProtectedRoute>} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
