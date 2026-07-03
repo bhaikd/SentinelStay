@@ -61,7 +61,15 @@ export default function Channels() {
       }
     })();
     const unsub = api.subscribeAllMessages((row) => {
-      setAllMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+      setAllMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === row.id);
+        if (idx > -1) {
+          const next = [...prev];
+          next[idx] = row;
+          return next;
+        }
+        return [...prev, row];
+      });
     });
     return () => {
       active = false;
@@ -341,7 +349,17 @@ export default function Channels() {
                               📍 Open in Maps ({msg.lat.toFixed(5)}, {msg.lng.toFixed(5)})
                             </a>
                           )}
-                          {msg.body}
+                          {msg.sender === 'guest' && msg.body_translated ? (
+                            <div>
+                              <p>{msg.body_translated}</p>
+                              <p className="text-[10px] text-on-surface-variant/50 mt-1 italic border-t border-outline-variant/30 pt-1 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[10px]">translate</span>
+                                Translated from {msg.language_code?.toUpperCase()} • <span className="underline cursor-pointer hover:text-on-surface-variant" onClick={() => alert(msg.body ?? '')}>Show Original</span>
+                              </p>
+                            </div>
+                          ) : (
+                            msg.body
+                          )}
                         </div>
                       </>
                     )}

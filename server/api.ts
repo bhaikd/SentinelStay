@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -8,6 +9,10 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
@@ -429,6 +434,149 @@ Double check that all recommended staffId values match the available staff IDs. 
   } catch (error: any) {
     console.error('Error generating AI dispatch recommendations:', error);
     res.json(getFallbackRecommendations());
+  }
+});
+
+app.post('/api/messages/translate', async (req, res) => {
+  const { messageId } = req.body;
+  if (!messageId) {
+    res.status(400).json({ error: 'Missing messageId' });
+    return;
+  }
+
+  try {
+    // 1. Fetch message from database
+    const { data: msg, error: fetchErr } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('id', messageId)
+      .single();
+
+    if (fetchErr || !msg) {
+      res.status(404).json({ error: 'Message not found' });
+      return;
+    }
+
+    // Only translate text messages (body)
+    if (!msg.body) {
+      res.json({ status: 'no_body' });
+      return;
+    }
+
+    // If already translated, return
+    if (msg.body_translated) {
+      res.json({ status: 'already_translated' });
+      return;
+    }
+
+    // 2. Determine target language
+    let targetLanguage = 'English';
+    if (msg.sender !== 'guest') {
+      // Find guest room in channel key, e.g. "Tower A::1402"
+      const parts = msg.channel.split('::');
+      if (parts.length === 2) {
+        const room = parts[1];
+        const { data: guest } = await supabase
+          .from('guests')
+          .select('language')
+          .eq('room', room)
+          .limit(1)
+          .maybeSingle();
+        if (guest && guest.language) {
+          targetLanguage = guest.language;
+        }
+      }
+    }
+
+    // Fallback if no API key is configured
+    if (!process.env.GEMINI_API_KEY) {
+      let translated = msg.body;
+      let langCode = 'en';
+      if (msg.sender === 'guest') {
+        const isSpanish = /hola|ayuda|fuego|brazo|trapped|dolor/i.test(msg.body);
+        if (isSpanish) {
+          langCode = 'es';
+          translated = msg.body
+            .replace(/hola/i, 'Hello')
+            .replace(/ayuda/i, 'Help')
+            .replace(/fuego/i, 'Fire')
+            .replace(/dolor/i, 'Pain');
+        }
+      } else {
+        if (targetLanguage.toLowerCase() === 'spanish') {
+          langCode = 'es';
+          translated = `[Translated to Spanish]: ${msg.body}`;
+        }
+      }
+
+      await supabase
+        .from('messages')
+        .update({
+          language_code: langCode,
+          body_translated: translated
+        })
+        .eq('id', messageId);
+
+      res.json({ status: 'translated_mock', language: langCode, translation: translated });
+      return;
+    }
+
+    // Translate with Gemini
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    let prompt = '';
+    if (msg.sender === 'guest') {
+      prompt = `You are a translation assistant.
+Analyze the following message.
+1. Detect the ISO 639-1 language code (e.g. 'es', 'fr', 'ja', 'en').
+2. Translate the message to English. If the message is already in English, return it exactly as is.
+
+Message: "${msg.body}"
+
+You MUST output ONLY a valid JSON object matching the following schema. Do NOT include markdown code blocks like \`\`\`json. Output must be raw JSON only.
+Schema:
+{
+  "language_code": "detected language code",
+  "body_translated": "translated message text in English"
+}`;
+    } else {
+      prompt = `You are a translation assistant.
+Analyze the following message.
+1. Detect the ISO 639-1 language code (e.g. 'en').
+2. Translate the message to the target language: "${targetLanguage}". If the target language is English, return it as is.
+
+Message: "${msg.body}"
+
+You MUST output ONLY a valid JSON object matching the following schema. Do NOT include markdown code blocks like \`\`\`json. Output must be raw JSON only.
+Schema:
+{
+  "language_code": "detected language code",
+  "body_translated": "translated message text in ${targetLanguage}"
+}`;
+    }
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    try {
+      const parsed = JSON.parse(cleanText);
+      await supabase
+        .from('messages')
+        .update({
+          language_code: parsed.language_code,
+          body_translated: parsed.body_translated
+        })
+        .eq('id', messageId);
+
+      res.json({ status: 'translated_gemini', language: parsed.language_code, translation: parsed.body_translated });
+    } catch (parseErr) {
+      console.error('Failed to parse Gemini translation JSON:', text, parseErr);
+      res.status(500).json({ error: 'Failed to parse translation response' });
+    }
+
+  } catch (err: any) {
+    console.error('Translation error:', err);
+    res.status(500).json({ error: 'Failed to translate message' });
   }
 });
 

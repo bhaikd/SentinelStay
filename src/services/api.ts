@@ -475,16 +475,29 @@ export const api = {
       .select('*')
       .single();
     if (error) throw new Error(error.message);
+
+    if (input.body) {
+      fetch('/api/messages/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: data.id }),
+      }).catch((e) => console.error('Background translation call failed:', e));
+    }
+
     return data as ChatMessageRow;
   },
 
-  subscribeMessages(channel: string, onInsert: (row: ChatMessageRow) => void) {
+  subscribeMessages(channel: string, onUpdate: (row: ChatMessageRow) => void) {
     const sub = supabase
       .channel(`messages:${channel}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `channel=eq.${channel}` },
-        (payload) => onInsert(payload.new as ChatMessageRow),
+        { event: '*', schema: 'public', table: 'messages', filter: `channel=eq.${channel}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            onUpdate(payload.new as ChatMessageRow);
+          }
+        },
       )
       .subscribe();
     return () => {
@@ -492,13 +505,17 @@ export const api = {
     };
   },
 
-  subscribeAllMessages(onInsert: (row: ChatMessageRow) => void) {
+  subscribeAllMessages(onUpdate: (row: ChatMessageRow) => void) {
     const sub = supabase
       .channel('messages:all')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
-        (payload) => onInsert(payload.new as ChatMessageRow),
+        { event: '*', schema: 'public', table: 'messages' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            onUpdate(payload.new as ChatMessageRow);
+          }
+        },
       )
       .subscribe();
     return () => {
@@ -545,5 +562,7 @@ export interface ChatMessageRow {
   attachment_type: 'image' | 'audio' | 'location' | null;
   lat: number | null;
   lng: number | null;
+  language_code?: string | null;
+  body_translated?: string | null;
   created_at: string;
 }

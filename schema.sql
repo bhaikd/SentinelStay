@@ -378,6 +378,8 @@ CREATE TABLE IF NOT EXISTS public.messages (
   attachment_type TEXT CHECK (attachment_type IN ('image', 'audio', 'location') OR attachment_type IS NULL),
   lat             DOUBLE PRECISION,
   lng             DOUBLE PRECISION,
+  language_code   TEXT,
+  body_translated TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_messages_channel_created ON public.messages (channel, created_at DESC);
